@@ -1,5 +1,5 @@
 streamlit
-opencv-python
-pillow
-requests
-toml
+opencv-python-headless
+numpy
+Pillow
+google-cloud-vision
