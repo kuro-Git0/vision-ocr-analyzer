@@ -7,9 +7,18 @@ from PIL import Image, ImageDraw, ImageFont
 from google.cloud import vision
 import re
 from collections import defaultdict
+import tempfile
+import json
 
-# ✅ Google Cloud Vision API認証設定
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "pachislot-ocr-458910-c0b5dda31bd7.json"
+# ✅ Google Cloud Vision API認証設定（Streamlit Secrets経由）
+if "google_credentials" in st.secrets:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".json", mode="w") as tmp:
+        json.dump(json.loads(st.secrets["google_credentials"]), tmp)
+        tmp.flush()
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
+else:
+    st.error("❌ Google Cloudの認証情報（google_credentials）が見つかりません。Secretsを確認してください。")
+
 client = vision.ImageAnnotatorClient()
 
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
