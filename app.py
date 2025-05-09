@@ -12,14 +12,12 @@ import json
 
 # ✅ Google Cloud Vision API認証設定（Streamlit Secrets経由）
 if "google_credentials" in st.secrets:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".json", mode="w") as tmp:
-        json.dump(dict(st.secrets["google_credentials"]), tmp)
-        tmp.flush()
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
+    # st.secrets は TOML → dict なので直接渡せる
+    client = vision.ImageAnnotatorClient.from_service_account_info(dict(st.secrets["google_credentials"]))
 else:
     st.error("❌ Google Cloudの認証情報（google_credentials）が見つかりません。Secretsを確認してください。")
+    st.stop()
 
-client = vision.ImageAnnotatorClient()
 
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
 st.title("🎰 パチスログラフ解析アプリ（グラフ自動検出＋最大枚数を座標指定で安定抽出＋赤色検出＋日本語フォント対応）")
