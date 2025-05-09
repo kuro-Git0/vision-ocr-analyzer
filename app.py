@@ -13,7 +13,7 @@ import json
 # ✅ Google Cloud Vision API認証設定（Streamlit Secrets経由）
 if "google_credentials" in st.secrets:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".json", mode="w") as tmp:
-        json.dump(json.loads(st.secrets["google_credentials"]), tmp)
+        json.dump(dict(st.secrets["google_credentials"]), tmp)
         tmp.flush()
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tmp.name
 else:
