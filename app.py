@@ -31,6 +31,8 @@ if 'ocr_cache' not in st.session_state:
     st.session_state.ocr_cache = {}
 if 'manual_corrections' not in st.session_state:
     st.session_state.manual_corrections = {}
+if 'name_mappings' not in st.session_state:
+    st.session_state.name_mappings = []
 
 # ✅ 名称マッピング保存＆ロード関数
 def load_mappings():
@@ -45,9 +47,6 @@ def load_mappings():
 def save_mappings(mappings):
     with open(MAPPINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(mappings, f, ensure_ascii=False, indent=2)
-
-if 'name_mappings' not in st.session_state:
-    st.session_state.name_mappings = load_mappings()
 
 # ✅ グラフ検出
 def detect_graph_rectangles(img_gray):
@@ -157,6 +156,7 @@ for i, mapping in enumerate(st.session_state.name_mappings):
         if updated_name_b != mapping["name_b"]:
             st.session_state.name_mappings[i]["name_b"] = updated_name_b
             save_mappings(st.session_state.name_mappings)
+            rerun_needed = True
     with cols[1]:
         if i < len(st.session_state.name_mappings) - 1:
             if st.button("⬇️", key=f"down_{i}"):
@@ -165,6 +165,10 @@ for i, mapping in enumerate(st.session_state.name_mappings):
                     st.session_state.name_mappings[i + 1],
                 )
                 save_mappings(st.session_state.name_mappings)
+                rerun_needed = True
+
+if rerun_needed:
+    st.experimental_rerun()
 
 # ✅ メイン処理
 machine_results = []
@@ -200,6 +204,7 @@ if uploaded_files:
             if machine_name not in existing_names:
                 st.session_state.name_mappings.append({"name_a": machine_name, "name_b": ""})
                 save_mappings(st.session_state.name_mappings)
+                st.experimental_rerun()
 
             display_name = next(
                 (m["name_b"] for m in st.session_state.name_mappings if m["name_a"] == machine_name and m["name_b"]),
@@ -213,6 +218,8 @@ if uploaded_files:
                 crop_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
                 pil_crop = Image.fromarray(crop_rgb)
 
+                key_name = f"{display_name}_graph_{idx + 1}"
+
                 if idx < len(samai_results):
                     samai_value = samai_results[idx][1]
                     samai_text = samai_results[idx][2]
@@ -223,7 +230,9 @@ if uploaded_files:
                 red_detected = has_red_area(crop)
                 red_status = "〇赤あり" if red_detected else "×赤なし"
 
-                key_name = f"{display_name}_graph_{idx + 1}"
+                # セッションの補正がなければ初期化しておく
+                if key_name not in st.session_state.manual_corrections:
+                    st.session_state.manual_corrections[key_name] = ""
 
                 machine_results.append({
                     "machine": display_name,
@@ -237,6 +246,8 @@ if uploaded_files:
 
         except Exception as e:
             st.error(f"エラー発生: {e}")
+
+# ✅ 出力と画像＋修正欄（この続きは既存と同じなので必要ならお伝えください）
 
 # ✅ 出力結果（即時反映OK）
 if machine_results:
