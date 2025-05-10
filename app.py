@@ -20,7 +20,7 @@ st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析�
 st.title("🎰 解析アプリ")
 
 # ✅ 出玉枚数のしきい値を設定（ユーザーが入力できる）
-threshold = st.number_input("出玉枚数のしきい値（以上）", value=2000, step=1000)
+threshold = st.number_input("出玉枚数のしきい値（以上）", value=2000, step=1000, key="threshold_input")
 
 # ✅ 画像アップローダー（複数ファイルをアップロード可）
 uploaded_files = st.file_uploader(
@@ -144,11 +144,8 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), f"{ocr_text}", fill="white", font=font)
     return pil_img
 
-# ✅ サイドバー（名称変更＋⬇️ボタンのみ、横並び）
+# ✅ サイドバー（名称変更＋⬇️ボタン、最下段非表示＆横並び）
 st.sidebar.title("🛠 名称変更設定")
-
-# 最新の保存データを必ずロード（ズレ防止）
-st.session_state.name_mappings = load_mappings()
 
 for i in range(len(st.session_state.name_mappings)):
     mapping = st.session_state.name_mappings[i]
@@ -161,14 +158,14 @@ for i in range(len(st.session_state.name_mappings)):
             st.session_state.name_mappings[i]["name_b"] = updated_name_b
             save_mappings(st.session_state.name_mappings)
     with col2:
-        if st.button("⬇️", key=f"down_{i}") and i < len(st.session_state.name_mappings) - 1:
-            st.session_state.name_mappings[i + 1], st.session_state.name_mappings[i] = (
-                st.session_state.name_mappings[i],
-                st.session_state.name_mappings[i + 1],
-            )
-            save_mappings(st.session_state.name_mappings)
-            st.session_state.name_mappings = load_mappings()
-            st.rerun()
+        if i < len(st.session_state.name_mappings) - 1:
+            if st.button("⬇️", key=f"down_{i}"):
+                st.session_state.name_mappings[i + 1], st.session_state.name_mappings[i] = (
+                    st.session_state.name_mappings[i],
+                    st.session_state.name_mappings[i + 1],
+                )
+                save_mappings(st.session_state.name_mappings)
+                st.experimental_rerun()
 
 # ✅ メイン処理
 machine_results = defaultdict(lambda: {"entries": [], "total_count": 0})
@@ -207,7 +204,7 @@ if uploaded_files:
             if machine_name not in existing_names:
                 st.session_state.name_mappings.append({"name_a": machine_name, "name_b": ""})
                 save_mappings(st.session_state.name_mappings)
-                st.rerun()
+                st.experimental_rerun()
 
             display_name = next(
                 (m["name_b"] for m in st.session_state.name_mappings if m["name_a"] == machine_name and m["name_b"]),
@@ -249,7 +246,7 @@ if uploaded_files:
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
-# ✅ 出力結果（順番も反映）
+# ✅ 出力結果（しきい値もリアルタイム反映）
 if machine_results:
     st.subheader("📊 出力結果")
     output_texts = []
