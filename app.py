@@ -168,8 +168,7 @@ for i, mapping in enumerate(st.session_state.name_mappings):
                 rerun_needed = True
 
 if rerun_needed:
-    st.experimental_rerun()
-
+    st.rerun()
 # ✅ メイン処理
 machine_results = []
 
