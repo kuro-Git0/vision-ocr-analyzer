@@ -11,12 +11,8 @@ import tempfile
 import json
 
 # ✅ Google Cloud Vision API認証設定（Streamlit Secrets経由）
-if "google_credentials" in st.secrets:
-    service_account_info = json.loads(st.secrets["google_credentials"])
-    client = vision.ImageAnnotatorClient.from_service_account_info(service_account_info)
-else:
-    st.error("❌ Google Cloudの認証情報（google_credentials）が見つかりません。Secretsを確認してください。")
-    st.stop()
+# Google Cloud Vision API認証設定（Secretsはdictなのでそのまま渡す）
+client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
 
 
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
