@@ -9,43 +9,48 @@ import re
 from collections import defaultdict
 import json
 
-# ✅ Google Cloud Vision API認証設定
+# ✅ Google Cloud Vision API認証設定（secretsから認証情報を読み込み）
 client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
 
-# ✅ 保存ファイル名
+# ✅ 保存ファイル名（機種名マッピングを保存するローカルJSONファイル）
 MAPPINGS_FILE = "mappings.json"
 
-# ✅ UI部分
+# ✅ UI初期設定
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
 st.title("🎰 解析アプリ")
 
+# ✅ 出玉枚数のしきい値を設定（ユーザーが入力できる）
 threshold = st.number_input("出玉枚数のしきい値（以上）", value=2000, step=1000)
 
+# ✅ 画像アップローダー（複数ファイルをアップロード可）
 uploaded_files = st.file_uploader(
     "📷 グラフ画像をアップロード（複数可）",
     type=None,
     accept_multiple_files=True
 )
 
+# ✅ OCRキャッシュ初期化（セッション内で使い回す）
 if 'ocr_cache' not in st.session_state:
     st.session_state.ocr_cache = {}
 
-# ✅ 名称マッピング保存＆ロード
+# ✅ 名称マッピング保存＆ロード関数
 def load_mappings():
+    """保存ファイルが存在すればJSONをロードし、なければ空リストを返す"""
     if os.path.exists(MAPPINGS_FILE):
         with open(MAPPINGS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return []
 
 def save_mappings(mappings):
+    """JSONファイルにマッピング内容を保存する"""
     with open(MAPPINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(mappings, f, ensure_ascii=False, indent=2)
 
-# ✅ 初期ロード
+# ✅ 初回読み込み時に既存マッピングをロード
 if 'name_mappings' not in st.session_state:
     st.session_state.name_mappings = load_mappings()
 
-# ✅ グラフ検出ロジック
+# ✅ グラフ検出ロジック（輪郭検出でグラフ領域を抽出）
 def detect_graph_rectangles(img_gray):
     blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
     edged = cv2.Canny(blurred, 30, 150)
@@ -53,12 +58,12 @@ def detect_graph_rectangles(img_gray):
     rects = []
     for c in contours:
         x, y, w, h = cv2.boundingRect(c)
-        if 200 < w < 800 and 200 < h < 800:
+        if 200 < w < 800 and 200 < h < 800:  # グラフと思われるサイズのものを抽出
             rects.append((x, y, w, h))
     rects = sorted(rects, key=lambda r: (r[1], r[0]))
     return rects
 
-# ✅ OCR実施
+# ✅ OCR実施（Google Cloud Visionでテキスト抽出）
 def run_ocr_once(img_cv):
     pil_image = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
     buffered = io.BytesIO()
@@ -67,7 +72,7 @@ def run_ocr_once(img_cv):
     image = vision.Image(content=image_content)
     return client.text_detection(image=image)
 
-# ✅ 機種名を抽出（以前の方式）
+# ✅ 機種名をOCR結果から抽出（ルール：数字+台が見つかった前の行）
 def extract_machine_name_by_lines(ocr_results):
     lines = ocr_results.full_text_annotation.text.split("\n")[:15]
     for i, line in enumerate(lines):
@@ -76,7 +81,7 @@ def extract_machine_name_by_lines(ocr_results):
                 return lines[i - 1].strip()
     return "不明"
 
-# ✅ 固定座標リスト
+# ✅ 固定座標リスト作成（2列×10行）
 def get_fixed_coords():
     coords = []
     for row in range(10):
@@ -86,7 +91,7 @@ def get_fixed_coords():
         coords.append((600, y1, 740, y2))
     return coords
 
-# ✅ 出玉OCR
+# ✅ 出玉枚数をOCR結果から座標で抽出
 def extract_samai_by_fixed_coords(ocr_results, coords, img_width, img_height):
     results = []
     for idx, (x1, y1, x2, y2) in enumerate(coords):
@@ -116,7 +121,7 @@ def extract_samai_by_fixed_coords(ocr_results, coords, img_width, img_height):
             results.append((idx, None, "なし"))
     return results
 
-# ✅ 赤色検出
+# ✅ 赤色検出（50ピクセル以上赤ならTrue）
 def has_red_area(image_bgr):
     hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
     lower_red1 = np.array([0, 100, 100])
@@ -129,7 +134,7 @@ def has_red_area(image_bgr):
     red_count = cv2.countNonZero(red_mask)
     return red_count >= 50
 
-# ✅ テキスト描画
+# ✅ テキスト描画（日本語フォント指定、Streamlit Cloud対応）
 def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw = ImageDraw.Draw(pil_img)
     try:
@@ -141,7 +146,7 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), f"{ocr_text}", fill="white", font=font)
     return pil_img
 
-# ✅ サイドバー
+# ✅ サイドバー（名称変更のUI部分を構築）
 st.sidebar.title("🛠 名称変更設定")
 for i, mapping in enumerate(st.session_state.name_mappings):
     col1, col2 = st.sidebar.columns([5, 2])
@@ -150,15 +155,17 @@ for i, mapping in enumerate(st.session_state.name_mappings):
             f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}"
         )
         if updated_name_b != mapping["name_b"]:
+            # 入力が変更された場合は即時保存
             st.session_state.name_mappings[i]["name_b"] = updated_name_b
             save_mappings(st.session_state.name_mappings)
     with col2:
         if st.button("削除", key=f"delete_{i}"):
+            # 削除ボタンでリストから削除＆保存＆再読み込み
             st.session_state.name_mappings.pop(i)
             save_mappings(st.session_state.name_mappings)
             st.experimental_rerun()
 
-# ✅ 処理本体
+# ✅ メイン処理
 machine_results = defaultdict(lambda: {"entries": [], "total_count": 0})
 all_extracted = []
 
@@ -172,6 +179,7 @@ if uploaded_files:
             continue
 
         try:
+            # 画像読み込みとリサイズ
             image = Image.open(uploaded_file)
             base_width = 780
             w_percent = (base_width / float(image.size[0]))
@@ -181,31 +189,37 @@ if uploaded_files:
             img_gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
             img_height, img_width = img_cv.shape[:2]
 
+            # OCR実施
             if uploaded_file.name not in st.session_state.ocr_cache:
                 ocr_results = run_ocr_once(img_cv)
                 st.session_state.ocr_cache[uploaded_file.name] = ocr_results
             else:
                 ocr_results = st.session_state.ocr_cache[uploaded_file.name]
 
+            # グラフ抽出
             rects = detect_graph_rectangles(img_gray)
             st.markdown(f"検出グラフ数：{len(rects)}個")
+
+            # 機種名抽出とマッピング反映
             machine_name = extract_machine_name_by_lines(ocr_results)
+            existing_names = [m["name_a"] for m in st.session_state.name_mappings]
+            if machine_name not in existing_names:
+                # 新しい機種名なら先頭に追加＆保存
+                st.session_state.name_mappings.insert(0, {"name_a": machine_name, "name_b": ""})
+                save_mappings(st.session_state.name_mappings)
+                st.experimental_rerun()
 
-existing_names = [m["name_a"] for m in st.session_state.name_mappings]
-if machine_name not in existing_names:
-    st.session_state.name_mappings.insert(0, {"name_a": machine_name, "name_b": ""})
-    save_mappings(st.session_state.name_mappings)
-    st.experimental_rerun()
+            # 表示用名称（登録があれば自由記述、なければそのまま）
+            display_name = next(
+                (m["name_b"] for m in st.session_state.name_mappings if m["name_a"] == machine_name and m["name_b"]),
+                machine_name
+            )
 
-display_name = next(
-    (m["name_b"] for m in st.session_state.name_mappings if m["name_a"] == machine_name and m["name_b"]),
-    machine_name
-)
-
-
+            # 出玉抽出＆集計
             samai_results = extract_samai_by_fixed_coords(ocr_results, coords_list, img_width, img_height)
             machine_results[display_name]["total_count"] += len(rects)
 
+            # 各グラフに対して画像生成＆赤色検出
             for idx, (x, y, w, h) in enumerate(rects):
                 crop = img_cv[y:y + h, x:x + w]
                 crop_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
@@ -238,6 +252,7 @@ display_name = next(
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
+# ✅ 出力結果をテキスト化して表示
 if machine_results:
     st.subheader("📊 出力結果")
     output_texts = []
@@ -260,6 +275,7 @@ if machine_results:
         output_texts.append("")
     st.code("\n".join(output_texts), language="")
 
+# ✅ 検出したグラフ画像を4列で表示
 cols = st.columns(4)
 for idx, item in enumerate(all_extracted):
     col = cols[idx % 4]
