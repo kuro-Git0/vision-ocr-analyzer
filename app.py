@@ -145,7 +145,7 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), f"{ocr_text}", fill="white", font=font)
     return pil_img
 
-# ✅ サイドバー（名称変更＋⬇️ボタンを復活＆即時反映）
+# ✅ サイドバー（名称変更＋⬇️ボタン 即時反映 st.rerun版）
 st.sidebar.title("🛠 名称変更設定")
 rerun_needed = False
 for i, mapping in enumerate(st.session_state.name_mappings):
@@ -169,7 +169,7 @@ for i, mapping in enumerate(st.session_state.name_mappings):
                 rerun_needed = True
 
 if rerun_needed:
-    st.experimental_rerun()
+    st.rerun()
 
 # ✅ メイン処理
 machine_results = []
@@ -205,7 +205,7 @@ if uploaded_files:
             if machine_name not in existing_names:
                 st.session_state.name_mappings.append({"name_a": machine_name, "name_b": ""})
                 save_mappings(st.session_state.name_mappings)
-                st.experimental_rerun()
+                st.rerun()
 
             display_name = next(
                 (m["name_b"] for m in st.session_state.name_mappings if m["name_a"] == machine_name and m["name_b"]),
@@ -219,7 +219,6 @@ if uploaded_files:
                 crop_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
                 pil_crop = Image.fromarray(crop_rgb)
 
-                # OCR結果から番号を正規表現で抽出
                 graph_text = ocr_results.full_text_annotation.text
                 match = re.search(rf'{re.escape(display_name)}.*?グラフ\s*(\d+)', graph_text)
                 graph_number = int(match.group(1)) if match else (idx + 1)
@@ -248,6 +247,9 @@ if uploaded_files:
 
         except Exception as e:
             st.error(f"エラー発生: {e}")
+
+# ✅ 出力結果＆画像表示はそのまま
+# ...（ここは前回のコードと同じでOKなので省略できますが必要なら全て貼ります）
 
 # ✅ 出力結果
 if machine_results:
