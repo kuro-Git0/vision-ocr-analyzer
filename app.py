@@ -35,14 +35,12 @@ if 'ocr_cache' not in st.session_state:
 
 # ✅ 名称マッピング保存＆ロード関数
 def load_mappings():
-    """保存ファイルが存在すればJSONをロードし、なければ空リストを返す"""
     if os.path.exists(MAPPINGS_FILE):
         with open(MAPPINGS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return []
 
 def save_mappings(mappings):
-    """JSONファイルにマッピング内容を保存する"""
     with open(MAPPINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(mappings, f, ensure_ascii=False, indent=2)
 
@@ -50,7 +48,7 @@ def save_mappings(mappings):
 if 'name_mappings' not in st.session_state:
     st.session_state.name_mappings = load_mappings()
 
-# ✅ グラフ検出ロジック（輪郭検出でグラフ領域を抽出）
+# ✅ グラフ検出ロジック
 def detect_graph_rectangles(img_gray):
     blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
     edged = cv2.Canny(blurred, 30, 150)
@@ -63,7 +61,7 @@ def detect_graph_rectangles(img_gray):
     rects = sorted(rects, key=lambda r: (r[1], r[0]))
     return rects
 
-# ✅ OCR実施（Google Cloud Visionでテキスト抽出）
+# ✅ OCR実施
 def run_ocr_once(img_cv):
     pil_image = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
     buffered = io.BytesIO()
@@ -72,7 +70,7 @@ def run_ocr_once(img_cv):
     image = vision.Image(content=image_content)
     return client.text_detection(image=image)
 
-# ✅ 機種名をOCR結果から抽出
+# ✅ 機種名を抽出
 def extract_machine_name_by_lines(ocr_results):
     lines = ocr_results.full_text_annotation.text.split("\n")[:15]
     for i, line in enumerate(lines):
@@ -146,10 +144,10 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), f"{ocr_text}", fill="white", font=font)
     return pil_img
 
-# ✅ サイドバー（名称変更＋上下ボタン）
+# ✅ サイドバー（名称変更＋上下ボタンのみ）
 st.sidebar.title("🛠 名称変更設定")
 for i, mapping in enumerate(st.session_state.name_mappings):
-    col1, col2, col3, col4 = st.sidebar.columns([4, 1, 1, 1])
+    col1, col2, col3 = st.sidebar.columns([5, 1, 1])
     with col1:
         updated_name_b = st.text_input(
             f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}"
@@ -171,11 +169,6 @@ for i, mapping in enumerate(st.session_state.name_mappings):
                 st.session_state.name_mappings[i],
                 st.session_state.name_mappings[i + 1],
             )
-            save_mappings(st.session_state.name_mappings)
-            st.rerun()
-    with col4:
-        if st.button("削除", key=f"delete_{i}"):
-            st.session_state.name_mappings.pop(i)
             save_mappings(st.session_state.name_mappings)
             st.rerun()
 
@@ -258,7 +251,7 @@ if uploaded_files:
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
-# ✅ 出力結果をテキスト化して表示（並び順は name_mappings の順序に従う）
+# ✅ 出力結果（順番も反映）
 if machine_results:
     st.subheader("📊 出力結果")
     output_texts = []
