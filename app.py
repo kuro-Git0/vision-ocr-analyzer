@@ -281,3 +281,22 @@ for idx, item in enumerate(all_extracted):
     col = cols[idx % 4]
     with col:
         col.image(item["image"], use_container_width=True)
+
+# ✅ CSSを使ってスマホでも常に4列レイアウトを維持（強制指定）
+st.markdown(
+    """
+    <style>
+    /* カラムを無理やり横に並べる */
+    .element-container:has(.stImage) {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        justify-content: space-between !important;
+    }
+    .element-container:has(.stImage) > div {
+        flex: 0 0 24% !important; /* 4列分の幅に固定 */
+        margin-bottom: 10px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
