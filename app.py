@@ -9,8 +9,12 @@ import re
 from collections import defaultdict
 import json
 
-# ✅ Google Cloud Vision API認証設定（改行問題を完全対応）
-client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
+# ✅ Google Cloud Vision API認証設定（改行をJSON形式に再変換）
+google_credentials = dict(st.secrets["google_credentials"])
+if isinstance(google_credentials["private_key"], str):
+    google_credentials["private_key"] = google_credentials["private_key"].replace("\n", "\\n")
+
+client = vision.ImageAnnotatorClient.from_service_account_info(google_credentials)
 
 
 # ✅ UI部分（以下はそのままでOK）
