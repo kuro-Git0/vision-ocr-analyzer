@@ -36,8 +36,11 @@ if 'ocr_cache' not in st.session_state:
 # ✅ 名称マッピング保存＆ロード関数
 def load_mappings():
     if os.path.exists(MAPPINGS_FILE):
-        with open(MAPPINGS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(MAPPINGS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            return []
     return []
 
 def save_mappings(mappings):
@@ -144,29 +147,28 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), f"{ocr_text}", fill="white", font=font)
     return pil_img
 
-# ✅ サイドバー（名称変更＋⬇️ボタンを左に）
+# ✅ サイドバー（名称変更＋⬇️ボタンを右側に配置）
 st.sidebar.title("🛠 名称変更設定")
 for i, mapping in enumerate(st.session_state.name_mappings):
-    col_button, col_text = st.sidebar.columns([1, 5])
+    cols = st.sidebar.columns([5, 1])  # 自由記述Bの横に⬇️ボタンを配置
 
-    with col_button:
-        if i < len(st.session_state.name_mappings) - 1:
-            if st.button("⬇️", key=f"down_{i}"):
-                # 順番入れ替え
-                st.session_state.name_mappings[i + 1], st.session_state.name_mappings[i] = (
-                    st.session_state.name_mappings[i],
-                    st.session_state.name_mappings[i + 1],
-                )
-                save_mappings(st.session_state.name_mappings)
-                st.rerun()  # 完全再描画
-
-    with col_text:
+    with cols[0]:
         updated_name_b = st.text_input(
             f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}"
         )
         if updated_name_b != mapping["name_b"]:
             st.session_state.name_mappings[i]["name_b"] = updated_name_b
             save_mappings(st.session_state.name_mappings)
+
+    with cols[1]:
+        if i < len(st.session_state.name_mappings) - 1:
+            if st.button("⬇️", key=f"down_{i}"):
+                st.session_state.name_mappings[i + 1], st.session_state.name_mappings[i] = (
+                    st.session_state.name_mappings[i],
+                    st.session_state.name_mappings[i + 1],
+                )
+                save_mappings(st.session_state.name_mappings)
+                st.rerun()
 
 # ✅ メイン処理
 machine_results = defaultdict(lambda: {"entries": [], "total_count": 0})
@@ -205,7 +207,7 @@ if uploaded_files:
             if machine_name not in existing_names:
                 st.session_state.name_mappings.append({"name_a": machine_name, "name_b": ""})
                 save_mappings(st.session_state.name_mappings)
-                st.experimental_rerun()
+                st.rerun()
 
             display_name = next(
                 (m["name_b"] for m in st.session_state.name_mappings if m["name_a"] == machine_name and m["name_b"]),
@@ -247,7 +249,7 @@ if uploaded_files:
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
-# ✅ 出力結果（しきい値もリアルタイム反映）
+# ✅ 出力結果
 if machine_results:
     st.subheader("📊 出力結果")
     output_texts = []
