@@ -29,7 +29,7 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
-# ✅ OCRキャッシュ初期化
+# ✅ OCRキャッシュ＆修正データ初期化
 if 'ocr_cache' not in st.session_state:
     st.session_state.ocr_cache = {}
 if 'manual_corrections' not in st.session_state:
@@ -93,11 +93,22 @@ def has_red_area(image_bgr):
     red_count = cv2.countNonZero(red_mask)
     return red_count >= 50
 
-# ✅ サイドバー（名称変更＋⬇️ボタンを左側に）
+# ✅ 画像にテキストを描画（エラー防止用）
+def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
+    draw = ImageDraw.Draw(pil_img)
+    try:
+        font_path = os.path.join(os.path.dirname(__file__), "NotoSansJP-Medium.ttf")
+        font = ImageFont.truetype(font_path, size=24)
+    except IOError:
+        font = ImageFont.load_default()
+    draw.text((10, 5), f"{machine_name}", fill="white", font=font)
+    draw.text((10, 35), f"{ocr_text}", fill="white", font=font)
+    return pil_img
+
+# ✅ サイドバー（名称変更＋⬇️ボタンをテキスト左側に）
 st.sidebar.title("🛠 名称変更設定")
 for i, mapping in enumerate(st.session_state.name_mappings):
     col1, col2 = st.sidebar.columns([1, 5])
-
     with col1:
         if i < len(st.session_state.name_mappings) - 1:
             if st.button("⬇️", key=f"down_{i}"):
@@ -107,7 +118,6 @@ for i, mapping in enumerate(st.session_state.name_mappings):
                 )
                 save_mappings(st.session_state.name_mappings)
                 st.rerun()
-
     with col2:
         updated_name_b = st.text_input(
             f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}"
@@ -121,11 +131,6 @@ machine_results = defaultdict(list)
 
 if uploaded_files:
     for uploaded_file in uploaded_files:
-        filename_lower = uploaded_file.name.lower()
-        if not (filename_lower.endswith('.jpg') or filename_lower.endswith('.jpeg') or filename_lower.endswith('.png')):
-            st.warning(f"スキップ: {uploaded_file.name} はサポート外です")
-            continue
-
         try:
             image = Image.open(uploaded_file)
             base_width = 780
@@ -163,29 +168,21 @@ if uploaded_files:
                 red_detected = has_red_area(crop)
                 red_status = "〇赤あり" if red_detected else "×赤なし"
 
-                # OCR結果をキーにする
                 default_key = f"{display_name}_graph_{idx + 1}"
-                manual_value = st.session_state.manual_corrections.get(default_key, "")
-
-                samai_input = st.sidebar.text_input(
-                    f"{display_name} グラフ {idx + 1} 出玉修正",
-                    value=manual_value,
-                    key=f"manual_{default_key}"
-                )
-                if samai_input != manual_value:
-                    st.session_state.manual_corrections[default_key] = samai_input
+                prev_value = st.session_state.manual_corrections.get(default_key, "")
 
                 machine_results[display_name].append({
                     "index": idx + 1,
                     "image": pil_crop,
-                    "samai_value": samai_input.strip(),
-                    "red_status": red_status
+                    "samai_value": prev_value,
+                    "red_status": red_status,
+                    "ocr_default": f"OCR自動検出: {red_status}"
                 })
 
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
-# ✅ 出力結果（しきい値もリアルタイム反映＆グラフ番号昇順ソート）
+# ✅ 出力結果
 if machine_results:
     st.subheader("📊 出力結果")
     output_texts = []
@@ -196,12 +193,13 @@ if machine_results:
         results = sorted(machine_results[machine], key=lambda x: x["index"])
         filtered = []
         for result in results:
+            val = result["samai_value"]
             try:
-                val = int(result["samai_value"])
+                num = int(val)
             except:
                 continue
-            if val >= threshold:
-                filtered.append(val)
+            if num >= threshold:
+                filtered.append(num)
 
         header = f"▼{machine} ({len(filtered)}/{len(results)})"
         output_texts.append(header)
@@ -219,7 +217,7 @@ if machine_results:
         output_texts.append("")
     st.code("\n".join(output_texts), language="")
 
-# ✅ 検出グラフ画像を4列で表示（グラフ番号昇順）
+# ✅ 検出グラフ画像を4列で表示＆修正欄を下に
 cols = st.columns(4)
 for mapping in st.session_state.name_mappings:
     machine = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
@@ -228,9 +226,11 @@ for mapping in st.session_state.name_mappings:
     for item in sorted(machine_results[machine], key=lambda x: x["index"]):
         col = cols[(item["index"] - 1) % 4]
         with col:
-            annotated_img = draw_text_on_pil_image(
-                item["image"].copy(),
-                f"{machine} グラフ {item['index']}",
-                f"OCR結果: {item['samai_value']} / {item['red_status']}"
+            col.image(item["image"], use_container_width=True)
+            manual_key = f"{machine}_graph_{item['index']}"
+            corrected_text = st.text_input(
+                f"{machine} グラフ {item['index']} 出玉修正",
+                value=st.session_state.manual_corrections.get(manual_key, ""),
+                key=f"manual_{manual_key}"
             )
-            col.image(annotated_img, use_container_width=True)
+            st.session_state.manual_corrections[manual_key] = corrected_text
