@@ -265,33 +265,11 @@ if machine_results:
     st.code("\n".join(output_texts), language="")
 
 # ✅ 検出した画像をスマホでも4列固定で表示
-st.markdown(
-    """
-    <style>
-    .grid-container {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 10px;
-    }
-    .grid-item img {
-        width: 100% !important;
-        height: auto;
-    }
-    @media (max-width: 767px) {
-        .grid-container {
-            grid-template-columns: repeat(4, 1fr) !important;
-        }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 
-st.markdown('<div class="grid-container">', unsafe_allow_html=True)
-for item in all_extracted:
-    buffered = io.BytesIO()
-    item["image"].save(buffered, format="PNG")
-    img_b64 = base64.b64encode(buffered.getvalue()).decode()
-    img_html = f'<div class="grid-item"><img src="data:image/png;base64,{img_b64}"/></div>'
-    st.markdown(img_html, unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
+n_cols = 4  # 4列固定
+rows = [all_extracted[i:i + n_cols] for i in range(0, len(all_extracted), n_cols)]
+
+for row in rows:
+    cols = st.columns(n_cols)
+    for col, item in zip(cols, row):
+        col.image(item["image"], use_column_width=True)
