@@ -303,21 +303,3 @@ for item in all_extracted:
     img_html = f'<div class="grid-item"><img src="data:image/png;base64,{img_b64}"/></div>'
     st.markdown(img_html, unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
-# ✅ CSSを使ってスマホでも常に4列レイアウトを維持（強制指定）
-st.markdown(
-    """
-    <style>
-    /* カラムを無理やり横に並べる */
-    .element-container:has(.stImage) {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        justify-content: space-between !important;
-    }
-    .element-container:has(.stImage) > div {
-        flex: 0 0 24% !important; /* 4列分の幅に固定 */
-        margin-bottom: 10px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
