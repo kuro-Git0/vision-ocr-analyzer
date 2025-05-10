@@ -276,12 +276,32 @@ if machine_results:
     st.code("\n".join(output_texts), language="")
 
 # ✅ 検出したグラフ画像を4列で表示
-cols = st.columns(4)
-for idx, item in enumerate(all_extracted):
-    col = cols[idx % 4]
-    with col:
-        col.image(item["image"], use_container_width=True)
+# ✅ グリッド形式で強制的に4列表示（スマホでも4列固定）
+st.markdown(
+    """
+    <style>
+    .grid-container {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+    }
+    .grid-item img {
+        width: 100% !important;
+        height: auto;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
+st.markdown('<div class="grid-container">', unsafe_allow_html=True)
+for item in all_extracted:
+    buffered = io.BytesIO()
+    item["image"].save(buffered, format="PNG")
+    img_b64 = base64.b64encode(buffered.getvalue()).decode()
+    img_html = f'<div class="grid-item"><img src="data:image/png;base64,{img_b64}"/></div>'
+    st.markdown(img_html, unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 # ✅ CSSを使ってスマホでも常に4列レイアウトを維持（強制指定）
 st.markdown(
     """
