@@ -9,16 +9,15 @@ import re
 from collections import defaultdict
 import json
 
-# ✅ Google Cloud Vision API認証設定
+# ✅ Google Cloud Vision API認証
 client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
 
 MAPPINGS_FILE = "mappings.json"
 
-# ✅ UI初期設定
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
 st.title("🎰 解析アプリ")
 
-threshold = st.number_input("出玉枚数のしきい値（以上）", value=2000, step=1000, key="threshold_input")
+threshold = st.number_input("出玉枚数のしきい値（以上）", value=2000, step=1000)
 
 uploaded_files = st.file_uploader(
     "📷 グラフ画像をアップロード（複数可）",
@@ -26,7 +25,6 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
-# ✅ OCRキャッシュ & 修正欄初期化
 if 'ocr_cache' not in st.session_state:
     st.session_state.ocr_cache = {}
 if 'manual_corrections' not in st.session_state:
@@ -85,18 +83,7 @@ def has_red_area(image_bgr):
     red_count = cv2.countNonZero(red_mask)
     return red_count >= 50
 
-def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
-    draw = ImageDraw.Draw(pil_img)
-    try:
-        font_path = os.path.join(os.path.dirname(__file__), "NotoSansJP-Medium.ttf")
-        font = ImageFont.truetype(font_path, size=24)
-    except IOError:
-        font = ImageFont.load_default()
-    draw.text((10, 5), f"{machine_name}", fill="white", font=font)
-    draw.text((10, 35), f"{ocr_text}", fill="white", font=font)
-    return pil_img
-
-# ✅ サイドバー名称編集
+# ✅ 名称変更用
 st.sidebar.title("🛠 名称変更設定")
 for i, mapping in enumerate(st.session_state.name_mappings):
     col1, col2 = st.sidebar.columns([1, 5])
@@ -117,7 +104,6 @@ for i, mapping in enumerate(st.session_state.name_mappings):
             st.session_state.name_mappings[i]["name_b"] = updated_name_b
             save_mappings(st.session_state.name_mappings)
 
-# ✅ データ保持
 graph_data_list = []
 
 if uploaded_files:
@@ -165,15 +151,15 @@ if uploaded_files:
                 red_status = "〇赤あり" if red_detected else "×赤なし"
 
                 default_key = f"{display_name}_graph_{idx + 1}"
-                ocr_default = "0"
 
-                # OCR内から数字を抽出
+                # OCRから数値を取得
                 full_text = ocr_results.full_text_annotation.text
                 found_match = re.search(r'\d{3,5}', full_text.replace(",", ""))
-                if found_match:
-                    ocr_default = found_match.group()
+                ocr_value = found_match.group() if found_match else "0"
 
-                manual_value = st.session_state.manual_corrections.get(default_key, "")
+                # manual_correctionsに初期登録（空の場合）
+                if default_key not in st.session_state.manual_corrections:
+                    st.session_state.manual_corrections[default_key] = ""
 
                 graph_data_list.append({
                     "machine": display_name,
@@ -181,42 +167,40 @@ if uploaded_files:
                     "image": pil_crop,
                     "red_status": red_status,
                     "manual_key": default_key,
-                    "manual_value": manual_value,
-                    "ocr_value": ocr_default
+                    "ocr_value": ocr_value
                 })
 
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
-# ✅ ソートして表示
 if graph_data_list:
     sorted_graphs = sorted(graph_data_list, key=lambda x: (x["machine"], x["index"]))
     cols = st.columns(4)
     for i, data in enumerate(sorted_graphs):
         col = cols[i % 4]
         with col:
-            current_val = data["manual_value"] if data["manual_value"] else data["ocr_value"]
-            annotated_img = draw_text_on_pil_image(
-                data["image"].copy(),
-                f"{data['machine']} グラフ {data['index']}",
-                f"OCR結果: {current_val} / {data['red_status']}"
-            )
+            # 表示用：OCR値 or 修正値
+            current_val = st.session_state.manual_corrections.get(data["manual_key"], "").strip()
+            show_val = current_val if current_val else data["ocr_value"]
+            annotated_img = data["image"].copy()
+            draw = ImageDraw.Draw(annotated_img)
+            draw.text((10, 5), f"{data['machine']} グラフ {data['index']}", fill="white")
+            draw.text((10, 35), f"OCR結果: {show_val} / {data['red_status']}", fill="white")
             col.image(annotated_img, use_container_width=True)
 
             corrected = st.text_input(
                 f"{data['machine']} グラフ {data['index']} 出玉修正",
-                value=data["manual_value"],
+                value=current_val,
                 key=f"correct_{data['manual_key']}"
             )
             st.session_state.manual_corrections[data["manual_key"]] = corrected
 
-# ✅ 出力結果
-if graph_data_list:
+    # ✅ 出力結果
     st.subheader("📊 出力結果")
     output_texts = []
     machine_group = defaultdict(list)
-    for data in graph_data_list:
-        val_text = st.session_state.manual_corrections.get(data["manual_key"], "")
+    for data in sorted_graphs:
+        val_text = st.session_state.manual_corrections.get(data["manual_key"], "").strip()
         val_to_use = val_text if val_text else data["ocr_value"]
         try:
             val = int(val_to_use)
