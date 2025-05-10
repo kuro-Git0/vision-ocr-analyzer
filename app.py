@@ -27,6 +27,7 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
+# ✅ セッション初期化
 if 'ocr_cache' not in st.session_state:
     st.session_state.ocr_cache = {}
 if 'manual_corrections' not in st.session_state:
@@ -169,6 +170,7 @@ for i, mapping in enumerate(st.session_state.name_mappings):
 
 if rerun_needed:
     st.rerun()
+
 # ✅ メイン処理
 machine_results = []
 
@@ -203,7 +205,7 @@ if uploaded_files:
             if machine_name not in existing_names:
                 st.session_state.name_mappings.append({"name_a": machine_name, "name_b": ""})
                 save_mappings(st.session_state.name_mappings)
-                st.experimental_rerun()
+                st.rerun()
 
             display_name = next(
                 (m["name_b"] for m in st.session_state.name_mappings if m["name_a"] == machine_name and m["name_b"]),
@@ -219,6 +221,9 @@ if uploaded_files:
 
                 key_name = f"{display_name}_graph_{idx + 1}"
 
+                if key_name not in st.session_state.manual_corrections:
+                    st.session_state.manual_corrections[key_name] = ""
+
                 if idx < len(samai_results):
                     samai_value = samai_results[idx][1]
                     samai_text = samai_results[idx][2]
@@ -228,10 +233,6 @@ if uploaded_files:
 
                 red_detected = has_red_area(crop)
                 red_status = "〇赤あり" if red_detected else "×赤なし"
-
-                # セッションの補正がなければ初期化しておく
-                if key_name not in st.session_state.manual_corrections:
-                    st.session_state.manual_corrections[key_name] = ""
 
                 machine_results.append({
                     "machine": display_name,
@@ -246,9 +247,7 @@ if uploaded_files:
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
-# ✅ 出力と画像＋修正欄（この続きは既存と同じなので必要ならお伝えください）
-
-# ✅ 出力結果（即時反映OK）
+# ✅ 出力結果（即時反映）
 if machine_results:
     st.subheader("📊 出力結果")
     output_texts = []
@@ -289,7 +288,7 @@ if machine_results:
         output_texts.append("")
     st.code("\n".join(output_texts), language="")
 
-# ✅ 画像+修正欄（即反映）
+# ✅ 画像+修正欄
 cols = st.columns(4)
 for item in sorted(machine_results, key=lambda x: (x["machine"], x["graph_number"])):
     col = cols[(item["graph_number"] - 1) % 4]
