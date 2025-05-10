@@ -9,17 +9,14 @@ import re
 from collections import defaultdict
 import json
 
-# ✅ Google Cloud Vision API認証設定
 client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
 
-# ✅ 保存ファイル名
 MAPPINGS_FILE = "mappings.json"
 
-# ✅ UI初期設定
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
 st.title("🎰 解析アプリ")
 
-threshold = st.number_input("出玉枚数のしきい値（以上）", value=2000, step=1000, key="threshold_input")
+threshold = st.number_input("出玉枚数のしきい値（以上）", value=2000, step=1000)
 
 uploaded_files = st.file_uploader(
     "📷 グラフ画像をアップロード（複数可）",
@@ -32,7 +29,6 @@ if 'ocr_cache' not in st.session_state:
 if 'manual_corrections' not in st.session_state:
     st.session_state.manual_corrections = {}
 
-# ✅ 名称マッピング保存＆ロード関数
 def load_mappings():
     if os.path.exists(MAPPINGS_FILE):
         try:
@@ -49,7 +45,6 @@ def save_mappings(mappings):
 if 'name_mappings' not in st.session_state:
     st.session_state.name_mappings = load_mappings()
 
-# ✅ グラフ検出
 def detect_graph_rectangles(img_gray):
     blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
     edged = cv2.Canny(blurred, 30, 150)
@@ -62,7 +57,6 @@ def detect_graph_rectangles(img_gray):
     rects = sorted(rects, key=lambda r: (r[1], r[0]))
     return rects
 
-# ✅ OCR実施
 def run_ocr_once(img_cv):
     pil_image = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
     buffered = io.BytesIO()
@@ -71,7 +65,6 @@ def run_ocr_once(img_cv):
     image = vision.Image(content=image_content)
     return client.text_detection(image=image)
 
-# ✅ 機種名抽出
 def extract_machine_name_by_lines(ocr_results):
     lines = ocr_results.full_text_annotation.text.split("\n")[:15]
     for i, line in enumerate(lines):
@@ -80,7 +73,6 @@ def extract_machine_name_by_lines(ocr_results):
                 return lines[i - 1].strip()
     return "不明"
 
-# ✅ 固定座標
 def get_fixed_coords():
     coords = []
     for row in range(10):
@@ -90,7 +82,6 @@ def get_fixed_coords():
         coords.append((600, y1, 740, y2))
     return coords
 
-# ✅ 出玉OCR
 def extract_samai_by_fixed_coords(ocr_results, coords, img_width, img_height):
     results = []
     for idx, (x1, y1, x2, y2) in enumerate(coords):
@@ -120,7 +111,6 @@ def extract_samai_by_fixed_coords(ocr_results, coords, img_width, img_height):
             results.append((idx, None, "なし"))
     return results
 
-# ✅ 赤色検出
 def has_red_area(image_bgr):
     hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
     lower_red1 = np.array([0, 100, 100])
@@ -133,7 +123,6 @@ def has_red_area(image_bgr):
     red_count = cv2.countNonZero(red_mask)
     return red_count >= 50
 
-# ✅ テキスト描画
 def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw = ImageDraw.Draw(pil_img)
     try:
@@ -145,10 +134,9 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), f"{ocr_text}", fill="white", font=font)
     return pil_img
 
-# ✅ サイドバー（名称変更＋⬇️ボタンを復活）
 st.sidebar.title("🛠 名称変更設定")
 for i, mapping in enumerate(st.session_state.name_mappings):
-    cols = st.sidebar.columns([5, 1])  # 入力欄と⬇️ボタン
+    cols = st.sidebar.columns([5, 1])
     with cols[0]:
         updated_name_b = st.text_input(
             f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}"
@@ -166,12 +154,10 @@ for i, mapping in enumerate(st.session_state.name_mappings):
                 save_mappings(st.session_state.name_mappings)
                 st.rerun()
 
-# ✅ メイン処理
 machine_results = []
 
 if uploaded_files:
     coords_list = get_fixed_coords()
-
     for uploaded_file in uploaded_files:
         filename_lower = uploaded_file.name.lower()
         if not (filename_lower.endswith('.jpg') or filename_lower.endswith('.jpeg') or filename_lower.endswith('.png')):
@@ -224,11 +210,14 @@ if uploaded_files:
                 red_detected = has_red_area(crop)
                 red_status = "〇赤あり" if red_detected else "×赤なし"
 
-                key_name = f"{display_name}_graph_{idx + 1}"
+                graph_label_match = re.search(r'グラフ\s*(\d+)', samai_text)
+                graph_number = int(graph_label_match.group(1)) if graph_label_match else (idx + 1)
+
+                key_name = f"{display_name}_graph_{graph_number}"
 
                 machine_results.append({
                     "machine": display_name,
-                    "index": idx + 1,
+                    "index": graph_number,
                     "image": pil_crop,
                     "samai_value": samai_value,
                     "samai_text": samai_text,
@@ -239,7 +228,6 @@ if uploaded_files:
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
-# ✅ 出力結果（赤ありのみ & OCR/修正反映）
 if machine_results:
     st.subheader("📊 出力結果")
     output_texts = []
@@ -251,7 +239,7 @@ if machine_results:
         results = sorted(grouped[machine], key=lambda x: x["index"])
         filtered = []
         for result in results:
-            manual_input = st.session_state.manual_corrections.get(result["manual_key"], "").strip()
+            manual_input = st.session_state.get(f"manual_{result['manual_key']}", "").strip()
             final_value = None
             if manual_input:
                 try:
@@ -261,7 +249,6 @@ if machine_results:
             elif result["samai_value"]:
                 final_value = result["samai_value"]
 
-            # ✅ 赤ありのみ出力対象
             if final_value is not None and final_value >= threshold and result["red_status"] == "〇赤あり":
                 filtered.append(final_value)
 
@@ -281,7 +268,6 @@ if machine_results:
         output_texts.append("")
     st.code("\n".join(output_texts), language="")
 
-# ✅ 画像+修正欄を4列（機種名+グラフ番号ソート）
 cols = st.columns(4)
 for item in sorted(machine_results, key=lambda x: (x["machine"], x["index"])):
     col = cols[(item["index"] - 1) % 4]
@@ -292,10 +278,8 @@ for item in sorted(machine_results, key=lambda x: (x["machine"], x["index"])):
             f"OCR結果: {item['samai_text']} / {item['red_status']}"
         )
         st.image(annotated_img, use_container_width=True)
-        corrected = st.text_input(
-            f"{item['machine']} グラフ {item['index']} 出玉修正",
-            value="",
+        st.text_input(
+            "",
+            value=st.session_state.manual_corrections.get(item["manual_key"], ""),
             key=f"manual_{item['manual_key']}"
         )
-        if corrected:
-            st.session_state.manual_corrections[item["manual_key"]] = corrected
