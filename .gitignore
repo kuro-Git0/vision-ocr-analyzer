@@ -1,0 +1,6 @@
+# Google認証ファイルは絶対にアップしない
+pachislot-ocr-458910-c0b5dda31bd7.json
+
+# 一時ファイルやキャッシュ
+__pycache__/
+*.pyc
