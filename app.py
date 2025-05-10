@@ -157,7 +157,6 @@ for i, mapping in enumerate(st.session_state.name_mappings):
         if updated_name_b != mapping["name_b"]:
             st.session_state.name_mappings[i]["name_b"] = updated_name_b
             save_mappings(st.session_state.name_mappings)
-            rerun_needed = True
     with cols[1]:
         if i < len(st.session_state.name_mappings) - 1:
             if st.button("⬇️", key=f"down_{i}"):
@@ -166,10 +165,6 @@ for i, mapping in enumerate(st.session_state.name_mappings):
                     st.session_state.name_mappings[i + 1],
                 )
                 save_mappings(st.session_state.name_mappings)
-                rerun_needed = True
-
-if rerun_needed:
-    st.rerun()
 
 # ✅ メイン処理
 machine_results = []
@@ -205,7 +200,6 @@ if uploaded_files:
             if machine_name not in existing_names:
                 st.session_state.name_mappings.append({"name_a": machine_name, "name_b": ""})
                 save_mappings(st.session_state.name_mappings)
-                st.rerun()
 
             display_name = next(
                 (m["name_b"] for m in st.session_state.name_mappings if m["name_a"] == machine_name and m["name_b"]),
@@ -244,7 +238,7 @@ if uploaded_files:
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
-# ✅ 出力結果（赤ありのみ & OCR/修正反映）
+# ✅ 出力結果（即時反映OK）
 if machine_results:
     st.subheader("📊 出力結果")
     output_texts = []
@@ -285,7 +279,7 @@ if machine_results:
         output_texts.append("")
     st.code("\n".join(output_texts), language="")
 
-# ✅ 画像+修正欄を4列表示
+# ✅ 画像+修正欄（即反映）
 cols = st.columns(4)
 for item in sorted(machine_results, key=lambda x: (x["machine"], x["graph_number"])):
     col = cols[(item["graph_number"] - 1) % 4]
@@ -298,8 +292,7 @@ for item in sorted(machine_results, key=lambda x: (x["machine"], x["graph_number
         st.image(annotated_img, use_container_width=True)
         corrected = st.text_input(
             "",
-            value="",
+            value=st.session_state.manual_corrections.get(item["manual_key"], ""),
             key=f"manual_{item['manual_key']}"
         )
-        if corrected:
-            st.session_state.manual_corrections[item["manual_key"]] = corrected
+        st.session_state.manual_corrections[item["manual_key"]] = corrected
