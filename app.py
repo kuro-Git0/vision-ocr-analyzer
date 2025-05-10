@@ -9,27 +9,24 @@ import re
 from collections import defaultdict
 import json
 
-# ✅ Google Cloud Vision API認証設定（secretsから認証情報を読み込み）
+# ✅ Google Cloud Vision API認証設定
 client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
 
-# ✅ 保存ファイル名（機種名マッピングを保存するローカルJSONファイル）
+# ✅ 保存ファイル名
 MAPPINGS_FILE = "mappings.json"
 
 # ✅ UI初期設定
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
 st.title("🎰 解析アプリ")
 
-# ✅ 出玉枚数のしきい値を設定（ユーザーが入力できる）
 threshold = st.number_input("出玉枚数のしきい値（以上）", value=2000, step=1000, key="threshold_input")
 
-# ✅ 画像アップローダー（複数ファイルをアップロード可）
 uploaded_files = st.file_uploader(
     "📷 グラフ画像をアップロード（複数可）",
     type=None,
     accept_multiple_files=True
 )
 
-# ✅ OCRキャッシュと修正用キャッシュ
 if 'ocr_cache' not in st.session_state:
     st.session_state.ocr_cache = {}
 if 'manual_corrections' not in st.session_state:
@@ -52,7 +49,7 @@ def save_mappings(mappings):
 if 'name_mappings' not in st.session_state:
     st.session_state.name_mappings = load_mappings()
 
-# ✅ グラフ検出ロジック
+# ✅ グラフ検出
 def detect_graph_rectangles(img_gray):
     blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
     edged = cv2.Canny(blurred, 30, 150)
@@ -74,7 +71,7 @@ def run_ocr_once(img_cv):
     image = vision.Image(content=image_content)
     return client.text_detection(image=image)
 
-# ✅ 機種名を抽出
+# ✅ 機種名抽出
 def extract_machine_name_by_lines(ocr_results):
     lines = ocr_results.full_text_annotation.text.split("\n")[:15]
     for i, line in enumerate(lines):
@@ -83,7 +80,7 @@ def extract_machine_name_by_lines(ocr_results):
                 return lines[i - 1].strip()
     return "不明"
 
-# ✅ 固定座標リスト
+# ✅ 固定座標
 def get_fixed_coords():
     coords = []
     for row in range(10):
@@ -148,6 +145,27 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), f"{ocr_text}", fill="white", font=font)
     return pil_img
 
+# ✅ サイドバー（名称変更＋⬇️ボタンを復活）
+st.sidebar.title("🛠 名称変更設定")
+for i, mapping in enumerate(st.session_state.name_mappings):
+    cols = st.sidebar.columns([5, 1])  # 入力欄と⬇️ボタン
+    with cols[0]:
+        updated_name_b = st.text_input(
+            f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}"
+        )
+        if updated_name_b != mapping["name_b"]:
+            st.session_state.name_mappings[i]["name_b"] = updated_name_b
+            save_mappings(st.session_state.name_mappings)
+    with cols[1]:
+        if i < len(st.session_state.name_mappings) - 1:
+            if st.button("⬇️", key=f"down_{i}"):
+                st.session_state.name_mappings[i + 1], st.session_state.name_mappings[i] = (
+                    st.session_state.name_mappings[i],
+                    st.session_state.name_mappings[i + 1],
+                )
+                save_mappings(st.session_state.name_mappings)
+                st.rerun()
+
 # ✅ メイン処理
 machine_results = []
 
@@ -207,7 +225,6 @@ if uploaded_files:
                 red_status = "〇赤あり" if red_detected else "×赤なし"
 
                 key_name = f"{display_name}_graph_{idx + 1}"
-                default_val = st.session_state.manual_corrections.get(key_name, str(samai_value) if samai_value else "")
 
                 machine_results.append({
                     "machine": display_name,
@@ -216,14 +233,13 @@ if uploaded_files:
                     "samai_value": samai_value,
                     "samai_text": samai_text,
                     "red_status": red_status,
-                    "manual_key": key_name,
-                    "manual_value": default_val
+                    "manual_key": key_name
                 })
 
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
-# ✅ 出力結果を上に表示
+# ✅ 出力結果（赤ありのみ & OCR/修正反映）
 if machine_results:
     st.subheader("📊 出力結果")
     output_texts = []
@@ -245,7 +261,8 @@ if machine_results:
             elif result["samai_value"]:
                 final_value = result["samai_value"]
 
-            if final_value is not None and final_value >= threshold:
+            # ✅ 赤ありのみ出力対象
+            if final_value is not None and final_value >= threshold and result["red_status"] == "〇赤あり":
                 filtered.append(final_value)
 
         header = f"▼{machine} ({len(filtered)}/{len(results)})"
@@ -264,7 +281,7 @@ if machine_results:
         output_texts.append("")
     st.code("\n".join(output_texts), language="")
 
-# ✅ 画像＋出玉修正欄を4列ソート表示
+# ✅ 画像+修正欄を4列（機種名+グラフ番号ソート）
 cols = st.columns(4)
 for item in sorted(machine_results, key=lambda x: (x["machine"], x["index"])):
     col = cols[(item["index"] - 1) % 4]
@@ -277,8 +294,8 @@ for item in sorted(machine_results, key=lambda x: (x["machine"], x["index"])):
         st.image(annotated_img, use_container_width=True)
         corrected = st.text_input(
             f"{item['machine']} グラフ {item['index']} 出玉修正",
-            value=item["manual_value"],
+            value="",
             key=f"manual_{item['manual_key']}"
         )
-        if corrected != item["manual_value"]:
+        if corrected:
             st.session_state.manual_corrections[item["manual_key"]] = corrected
