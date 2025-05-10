@@ -9,33 +9,27 @@ import re
 from collections import defaultdict
 import json
 
-# ✅ Google Cloud Vision API認証設定（secretsから認証情報を読み込み）
+# ✅ Google Cloud Vision API認証設定
 client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
 
-# ✅ 保存ファイル名（機種名マッピングを保存するローカルJSONファイル）
 MAPPINGS_FILE = "mappings.json"
 
-# ✅ UI初期設定
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
 st.title("🎰 解析アプリ")
 
-# ✅ 出玉枚数のしきい値
 threshold = st.number_input("出玉枚数のしきい値（以上）", value=2000, step=1000, key="threshold_input")
 
-# ✅ 画像アップローダー
 uploaded_files = st.file_uploader(
     "📷 グラフ画像をアップロード（複数可）",
     type=None,
     accept_multiple_files=True
 )
 
-# ✅ OCRキャッシュ＆修正データ初期化
 if 'ocr_cache' not in st.session_state:
     st.session_state.ocr_cache = {}
 if 'manual_corrections' not in st.session_state:
     st.session_state.manual_corrections = {}
 
-# ✅ 名称マッピング保存＆ロード
 def load_mappings():
     if os.path.exists(MAPPINGS_FILE):
         with open(MAPPINGS_FILE, "r", encoding="utf-8") as f:
@@ -49,7 +43,6 @@ def save_mappings(mappings):
 if 'name_mappings' not in st.session_state:
     st.session_state.name_mappings = load_mappings()
 
-# ✅ グラフ検出
 def detect_graph_rectangles(img_gray):
     blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
     edged = cv2.Canny(blurred, 30, 150)
@@ -62,7 +55,6 @@ def detect_graph_rectangles(img_gray):
     rects = sorted(rects, key=lambda r: (r[1], r[0]))
     return rects
 
-# ✅ OCR
 def run_ocr_once(img_cv):
     pil_image = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
     buffered = io.BytesIO()
@@ -71,7 +63,6 @@ def run_ocr_once(img_cv):
     image = vision.Image(content=image_content)
     return client.text_detection(image=image)
 
-# ✅ 機種名抽出
 def extract_machine_name_by_lines(ocr_results):
     lines = ocr_results.full_text_annotation.text.split("\n")[:15]
     for i, line in enumerate(lines):
@@ -80,7 +71,6 @@ def extract_machine_name_by_lines(ocr_results):
                 return lines[i - 1].strip()
     return "不明"
 
-# ✅ 赤色検出
 def has_red_area(image_bgr):
     hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
     lower_red1 = np.array([0, 100, 100])
@@ -93,7 +83,6 @@ def has_red_area(image_bgr):
     red_count = cv2.countNonZero(red_mask)
     return red_count >= 50
 
-# ✅ 画像にテキストを描画（エラー防止用）
 def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw = ImageDraw.Draw(pil_img)
     try:
@@ -105,7 +94,6 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), f"{ocr_text}", fill="white", font=font)
     return pil_img
 
-# ✅ サイドバー（名称変更＋⬇️ボタンをテキスト左側に）
 st.sidebar.title("🛠 名称変更設定")
 for i, mapping in enumerate(st.session_state.name_mappings):
     col1, col2 = st.sidebar.columns([1, 5])
@@ -126,12 +114,12 @@ for i, mapping in enumerate(st.session_state.name_mappings):
             st.session_state.name_mappings[i]["name_b"] = updated_name_b
             save_mappings(st.session_state.name_mappings)
 
-# ✅ メイン処理
 machine_results = defaultdict(list)
 
 if uploaded_files:
     for uploaded_file in uploaded_files:
         try:
+            filename = uploaded_file.name
             image = Image.open(uploaded_file)
             base_width = 780
             w_percent = (base_width / float(image.size[0]))
@@ -168,21 +156,20 @@ if uploaded_files:
                 red_detected = has_red_area(crop)
                 red_status = "〇赤あり" if red_detected else "×赤なし"
 
-                default_key = f"{display_name}_graph_{idx + 1}"
-                prev_value = st.session_state.manual_corrections.get(default_key, "")
+                unique_key = f"{display_name}_{filename}_graph_{idx + 1}"
+                prev_value = st.session_state.manual_corrections.get(unique_key, "")
 
                 machine_results[display_name].append({
                     "index": idx + 1,
                     "image": pil_crop,
+                    "manual_key": unique_key,
                     "samai_value": prev_value,
-                    "red_status": red_status,
-                    "ocr_default": f"OCR自動検出: {red_status}"
+                    "red_status": red_status
                 })
 
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
-# ✅ 出力結果
 if machine_results:
     st.subheader("📊 出力結果")
     output_texts = []
@@ -193,7 +180,7 @@ if machine_results:
         results = sorted(machine_results[machine], key=lambda x: x["index"])
         filtered = []
         for result in results:
-            val = result["samai_value"]
+            val = st.session_state.manual_corrections.get(result["manual_key"], "")
             try:
                 num = int(val)
             except:
@@ -217,20 +204,18 @@ if machine_results:
         output_texts.append("")
     st.code("\n".join(output_texts), language="")
 
-# ✅ 検出グラフ画像を4列で表示＆修正欄を下に
-cols = st.columns(4)
-for mapping in st.session_state.name_mappings:
-    machine = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
-    if machine not in machine_results:
-        continue
-    for item in sorted(machine_results[machine], key=lambda x: x["index"]):
-        col = cols[(item["index"] - 1) % 4]
-        with col:
-            col.image(item["image"], use_container_width=True)
-            manual_key = f"{machine}_graph_{item['index']}"
-            corrected_text = st.text_input(
-                f"{machine} グラフ {item['index']} 出玉修正",
-                value=st.session_state.manual_corrections.get(manual_key, ""),
-                key=f"manual_{manual_key}"
-            )
-            st.session_state.manual_corrections[manual_key] = corrected_text
+    cols = st.columns(4)
+    for mapping in st.session_state.name_mappings:
+        machine = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
+        if machine not in machine_results:
+            continue
+        for item in sorted(machine_results[machine], key=lambda x: x["index"]):
+            col = cols[(item["index"] - 1) % 4]
+            with col:
+                col.image(item["image"], use_container_width=True)
+                corrected_text = st.text_input(
+                    f"{machine} グラフ {item['index']} 出玉修正",
+                    value=st.session_state.manual_corrections.get(item["manual_key"], ""),
+                    key=f"manual_{item['manual_key']}"
+                )
+                st.session_state.manual_corrections[item["manual_key"]] = corrected_text
