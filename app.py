@@ -145,18 +145,16 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), f"{ocr_text}", fill="white", font=font)
     return pil_img
 
-# ✅ サイドバー（即時反映 st.session_state だけで処理）
+# ✅ サイドバー（名称変更＋⬇️ボタン 安定版）
 st.sidebar.title("🛠 名称変更設定")
-for i in range(len(st.session_state.name_mappings)):
+for i, mapping in enumerate(st.session_state.name_mappings):
     cols = st.sidebar.columns([5, 1])
     with cols[0]:
         updated_name_b = st.text_input(
-            f"{st.session_state.name_mappings[i]['name_a']}",
-            value=st.session_state.name_mappings[i]['name_b'],
-            key=f"name_b_{i}"
+            f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}"
         )
-        if updated_name_b != st.session_state.name_mappings[i]['name_b']:
-            st.session_state.name_mappings[i]['name_b'] = updated_name_b
+        if updated_name_b != mapping["name_b"]:
+            st.session_state.name_mappings[i]["name_b"] = updated_name_b
             save_mappings(st.session_state.name_mappings)
     with cols[1]:
         if i < len(st.session_state.name_mappings) - 1:
@@ -166,7 +164,7 @@ for i in range(len(st.session_state.name_mappings)):
                     st.session_state.name_mappings[i],
                 )
                 save_mappings(st.session_state.name_mappings)
-                st.experimental_rerun()
+                st.sidebar.info("順番を入れ替えました。再読み込みすると反映されます。")
 
 # ✅ メイン処理
 machine_results = []
@@ -202,7 +200,6 @@ if uploaded_files:
             if machine_name not in existing_names:
                 st.session_state.name_mappings.append({"name_a": machine_name, "name_b": ""})
                 save_mappings(st.session_state.name_mappings)
-                st.experimental_rerun()
 
             display_name = next(
                 (m["name_b"] for m in st.session_state.name_mappings if m["name_a"] == machine_name and m["name_b"]),
@@ -216,7 +213,7 @@ if uploaded_files:
                 crop_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
                 pil_crop = Image.fromarray(crop_rgb)
 
-                graph_number = idx + 1  # ← ユーザー指定通り rects の順番
+                graph_number = idx + 1  # ✅ rects順で固定
 
                 if idx < len(samai_results):
                     samai_value = samai_results[idx][1]
@@ -243,7 +240,7 @@ if uploaded_files:
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
-# ✅ 出力＆表示（ソート厳密に machine + graph_number）
+# ✅ 出力＆表示（machine + graph_number でソート）
 if machine_results:
     st.subheader("📊 出力結果")
     output_texts = []
@@ -251,8 +248,8 @@ if machine_results:
     for item in machine_results:
         grouped[item["machine"]].append(item)
 
-    for machine in sorted(grouped.keys()):
-        results = sorted(grouped[machine], key=lambda x: x["graph_number"])
+    for machine in [m["name_b"] or m["name_a"] for m in st.session_state.name_mappings]:
+        results = sorted(grouped.get(machine, []), key=lambda x: x["graph_number"])
         filtered = []
         for result in results:
             manual_input = st.session_state.manual_corrections.get(result["manual_key"], "").strip()
@@ -268,23 +265,24 @@ if machine_results:
             if final_value is not None and final_value >= threshold and result["red_status"] == "〇赤あり":
                 filtered.append(final_value)
 
-        header = f"▼{machine} ({len(filtered)}/{len(results)})"
-        output_texts.append(header)
-        for val in sorted(filtered, reverse=True):
-            if val >= 19000:
-                output_texts.append(f"㊗️{val}枚 コンプ！")
-            elif val >= 10000:
-                output_texts.append(f"🎉{val}枚")
-            elif val >= 8000:
-                output_texts.append(f"🚨{val}枚")
-            elif val >= 5000:
-                output_texts.append(f"✨{val}枚")
-            else:
-                output_texts.append(f"・{val}枚")
-        output_texts.append("")
+        if results:
+            header = f"▼{machine} ({len(filtered)}/{len(results)})"
+            output_texts.append(header)
+            for val in sorted(filtered, reverse=True):
+                if val >= 19000:
+                    output_texts.append(f"㊗️{val}枚 コンプ！")
+                elif val >= 10000:
+                    output_texts.append(f"🎉{val}枚")
+                elif val >= 8000:
+                    output_texts.append(f"🚨{val}枚")
+                elif val >= 5000:
+                    output_texts.append(f"✨{val}枚")
+                else:
+                    output_texts.append(f"・{val}枚")
+            output_texts.append("")
     st.code("\n".join(output_texts), language="")
 
-# ✅ 画像表示（machine + graph_number でソート）
+# ✅ 画像表示
 cols = st.columns(4)
 for item in sorted(machine_results, key=lambda x: (x["machine"], x["graph_number"])):
     col = cols[(item["graph_number"] - 1) % 4]
