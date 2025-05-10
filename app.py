@@ -7,18 +7,13 @@ from PIL import Image, ImageDraw, ImageFont
 from google.cloud import vision
 import re
 from collections import defaultdict
-import tempfile
 import json
 
-# ✅ Google Cloud Vision API認証設定（改行問題を自動修正）
-google_credentials = dict(st.secrets["google_credentials"])
-if "\n" in google_credentials["private_key"]:
-    google_credentials["private_key"] = google_credentials["private_key"].replace("\n", "\\n")
-
+# ✅ Google Cloud Vision API認証設定（改行問題を完全対応）
+google_credentials = json.loads(json.dumps(dict(st.secrets["google_credentials"])))
 client = vision.ImageAnnotatorClient.from_service_account_info(google_credentials)
 
-
-# ✅UI部分
+# ✅ UI部分（以下はそのままでOK）
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
 st.title("🎰 パチスログラフ解析アプリ（グラフ自動検出＋最大枚数を座標指定で安定抽出＋赤色検出＋日本語フォント対応）")
 
