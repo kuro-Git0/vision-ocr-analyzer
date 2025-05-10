@@ -116,7 +116,8 @@ def has_red_area(image_bgr):
 def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw = ImageDraw.Draw(pil_img)
     try:
-        font_path = r"M:\マイドライブ\くろいけもみみ\開発\vision-ocr-analyzer\NotoSansJP-Medium.ttf"
+        # プロジェクト内のフォントを相対パスで読み込む（Streamlit Cloud対応）
+        font_path = os.path.join(os.path.dirname(__file__), "NotoSansJP-Medium.ttf")
         font = ImageFont.truetype(font_path, size=24)
     except IOError:
         font = ImageFont.load_default()
