@@ -144,28 +144,29 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), f"{ocr_text}", fill="white", font=font)
     return pil_img
 
-# ✅ サイドバー（名称変更＋⬇️ボタン、最下段非表示＆横並び）
+# ✅ サイドバー（名称変更＋⬇️ボタンを左に）
 st.sidebar.title("🛠 名称変更設定")
+for i, mapping in enumerate(st.session_state.name_mappings):
+    col_button, col_text = st.sidebar.columns([1, 5])
 
-for i in range(len(st.session_state.name_mappings)):
-    mapping = st.session_state.name_mappings[i]
-    col1, col2 = st.sidebar.columns([5, 1])
-    with col1:
+    with col_button:
+        if i < len(st.session_state.name_mappings) - 1:
+            if st.button("⬇️", key=f"down_{i}"):
+                # 順番入れ替え
+                st.session_state.name_mappings[i + 1], st.session_state.name_mappings[i] = (
+                    st.session_state.name_mappings[i],
+                    st.session_state.name_mappings[i + 1],
+                )
+                save_mappings(st.session_state.name_mappings)
+                st.rerun()  # 完全再描画
+
+    with col_text:
         updated_name_b = st.text_input(
             f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}"
         )
         if updated_name_b != mapping["name_b"]:
             st.session_state.name_mappings[i]["name_b"] = updated_name_b
             save_mappings(st.session_state.name_mappings)
-    with col2:
-        if i < len(st.session_state.name_mappings) - 1:
-            if st.button("⬇️", key=f"down_{i}"):
-                st.session_state.name_mappings[i + 1], st.session_state.name_mappings[i] = (
-                    st.session_state.name_mappings[i],
-                    st.session_state.name_mappings[i + 1],
-                )
-                save_mappings(st.session_state.name_mappings)
-                st.experimental_rerun()
 
 # ✅ メイン処理
 machine_results = defaultdict(lambda: {"entries": [], "total_count": 0})
