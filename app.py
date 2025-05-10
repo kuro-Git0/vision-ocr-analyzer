@@ -12,10 +12,12 @@ import json
 # ✅ Google Cloud Vision API認証設定
 client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
 
+# ✅ 保存ファイル名
+MAPPINGS_FILE = "mappings.json"
 
-# ✅ UI部分（以下はそのままでOK）
+# ✅ UI部分
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
-st.title("🎰 パチスログラフ解析アプリ（グラフ自動検出＋最大枚数を座標指定で安定抽出＋赤色検出＋日本語フォント対応）")
+st.title("🎰 解析アプリ")
 
 threshold = st.number_input("出玉枚数のしきい値（以上）", value=2000, step=1000)
 
@@ -27,6 +29,21 @@ uploaded_files = st.file_uploader(
 
 if 'ocr_cache' not in st.session_state:
     st.session_state.ocr_cache = {}
+
+# ✅ 名称マッピング保存＆ロード
+def load_mappings():
+    if os.path.exists(MAPPINGS_FILE):
+        with open(MAPPINGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+def save_mappings(mappings):
+    with open(MAPPINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(mappings, f, ensure_ascii=False, indent=2)
+
+# ✅ 初期ロード
+if 'name_mappings' not in st.session_state:
+    st.session_state.name_mappings = load_mappings()
 
 # ✅ グラフ検出ロジック
 def detect_graph_rectangles(img_gray):
@@ -59,17 +76,17 @@ def extract_machine_name_by_lines(ocr_results):
                 return lines[i - 1].strip()
     return "不明"
 
-# ✅ 固定座標リスト（例：2列×10行 = 20個）
+# ✅ 固定座標リスト
 def get_fixed_coords():
     coords = []
     for row in range(10):
         y1 = 1010 + row * 375
         y2 = 1040 + row * 375
-        coords.append((230, y1, 370, y2))  # 1列目
-        coords.append((600, y1, 740, y2))  # 2列目
+        coords.append((230, y1, 370, y2))
+        coords.append((600, y1, 740, y2))
     return coords
 
-# ✅ 出玉OCR（絶対座標式）
+# ✅ 出玉OCR
 def extract_samai_by_fixed_coords(ocr_results, coords, img_width, img_height):
     results = []
     for idx, (x1, y1, x2, y2) in enumerate(coords):
@@ -99,7 +116,7 @@ def extract_samai_by_fixed_coords(ocr_results, coords, img_width, img_height):
             results.append((idx, None, "なし"))
     return results
 
-# ✅ 赤色検出ロジック（50ピクセル以上で赤判定）
+# ✅ 赤色検出
 def has_red_area(image_bgr):
     hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
     lower_red1 = np.array([0, 100, 100])
@@ -112,22 +129,36 @@ def has_red_area(image_bgr):
     red_count = cv2.countNonZero(red_mask)
     return red_count >= 50
 
-# ✅ テキスト描画（PILで直接描き込み：日本語対応フォント）
+# ✅ テキスト描画
 def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw = ImageDraw.Draw(pil_img)
     try:
-        # プロジェクト内のフォントを相対パスで読み込む（Streamlit Cloud対応）
         font_path = os.path.join(os.path.dirname(__file__), "NotoSansJP-Medium.ttf")
         font = ImageFont.truetype(font_path, size=24)
     except IOError:
         font = ImageFont.load_default()
-    # 上部に描画
     draw.text((10, 5), f"{machine_name}", fill="white", font=font)
     draw.text((10, 35), f"{ocr_text}", fill="white", font=font)
     return pil_img
 
-# -----------------------------------
+# ✅ サイドバー
+st.sidebar.title("🛠 名称変更設定")
+for i, mapping in enumerate(st.session_state.name_mappings):
+    col1, col2 = st.sidebar.columns([5, 2])
+    with col1:
+        updated_name_b = st.text_input(
+            f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}"
+        )
+        if updated_name_b != mapping["name_b"]:
+            st.session_state.name_mappings[i]["name_b"] = updated_name_b
+            save_mappings(st.session_state.name_mappings)
+    with col2:
+        if st.button("削除", key=f"delete_{i}"):
+            st.session_state.name_mappings.pop(i)
+            save_mappings(st.session_state.name_mappings)
+            st.experimental_rerun()
 
+# ✅ 処理本体
 machine_results = defaultdict(lambda: {"entries": [], "total_count": 0})
 all_extracted = []
 
@@ -150,7 +181,6 @@ if uploaded_files:
             img_gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
             img_height, img_width = img_cv.shape[:2]
 
-            # OCR実行
             if uploaded_file.name not in st.session_state.ocr_cache:
                 ocr_results = run_ocr_once(img_cv)
                 st.session_state.ocr_cache[uploaded_file.name] = ocr_results
@@ -160,9 +190,21 @@ if uploaded_files:
             rects = detect_graph_rectangles(img_gray)
             st.markdown(f"検出グラフ数：{len(rects)}個")
             machine_name = extract_machine_name_by_lines(ocr_results)
-            samai_results = extract_samai_by_fixed_coords(ocr_results, coords_list, img_width, img_height)
 
-            machine_results[machine_name]["total_count"] += len(rects)
+existing_names = [m["name_a"] for m in st.session_state.name_mappings]
+if machine_name not in existing_names:
+    st.session_state.name_mappings.insert(0, {"name_a": machine_name, "name_b": ""})
+    save_mappings(st.session_state.name_mappings)
+    st.experimental_rerun()
+
+display_name = next(
+    (m["name_b"] for m in st.session_state.name_mappings if m["name_a"] == machine_name and m["name_b"]),
+    machine_name
+)
+
+
+            samai_results = extract_samai_by_fixed_coords(ocr_results, coords_list, img_width, img_height)
+            machine_results[display_name]["total_count"] += len(rects)
 
             for idx, (x, y, w, h) in enumerate(rects):
                 crop = img_cv[y:y + h, x:x + w]
@@ -179,14 +221,12 @@ if uploaded_files:
                 red_detected = has_red_area(crop)
                 red_status = "〇赤あり" if red_detected else "×赤なし"
 
-                # 出力結果フィルタ用
                 if red_detected and samai_value is not None:
-                    machine_results[machine_name]["entries"].append(samai_value)
+                    machine_results[display_name]["entries"].append(samai_value)
 
-                # PILで直接描画
                 annotated_img = draw_text_on_pil_image(
                     pil_crop.copy(),
-                    f"{machine_name} グラフ {idx + 1}",
+                    f"{display_name} グラフ {idx + 1}",
                     f"OCR結果: {samai_text} / {red_status}"
                 )
 
@@ -198,7 +238,6 @@ if uploaded_files:
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
-# ✅ 出力結果
 if machine_results:
     st.subheader("📊 出力結果")
     output_texts = []
@@ -221,7 +260,6 @@ if machine_results:
         output_texts.append("")
     st.code("\n".join(output_texts), language="")
 
-# ✅ グラフ結果を4列で表示
 cols = st.columns(4)
 for idx, item in enumerate(all_extracted):
     col = cols[idx % 4]
