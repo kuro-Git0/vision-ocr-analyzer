@@ -10,8 +10,8 @@ from collections import defaultdict
 import json
 
 # ✅ Google Cloud Vision API認証設定（改行問題を完全対応）
-google_credentials = json.loads(json.dumps(dict(st.secrets["google_credentials"])))
-client = vision.ImageAnnotatorClient.from_service_account_info(google_credentials)
+client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
+
 
 # ✅ UI部分（以下はそのままでOK）
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
