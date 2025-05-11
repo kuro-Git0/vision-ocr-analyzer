@@ -34,6 +34,8 @@ if 'manual_corrections' not in st.session_state:
     st.session_state.manual_corrections = {}
 if 'name_mappings' not in st.session_state:
     st.session_state.name_mappings = []
+if 'output_updated' not in st.session_state:
+    st.session_state.output_updated = False
 
 # ✅ 名称マッピング保存＆ロード関数
 def load_mappings():
@@ -169,7 +171,7 @@ for i, mapping in enumerate(st.session_state.name_mappings):
                 rerun_needed = True
 
 if rerun_needed:
-    st.rerun()
+    st.experimental_rerun()
 
 # ✅ メイン処理
 machine_results = []
@@ -205,7 +207,7 @@ if uploaded_files:
             if machine_name not in existing_names:
                 st.session_state.name_mappings.append({"name_a": machine_name, "name_b": ""})
                 save_mappings(st.session_state.name_mappings)
-                st.rerun()
+                st.experimental_rerun()
 
             display_name = next(
                 (m["name_b"] for m in st.session_state.name_mappings if m["name_a"] == machine_name and m["name_b"]),
@@ -247,7 +249,7 @@ if uploaded_files:
         except Exception as e:
             st.error(f"エラー発生: {e}")
 
-# ✅ 出力結果（即時反映）
+# ✅ 出力結果
 if machine_results:
     st.subheader("📊 出力結果")
     output_texts = []
@@ -288,7 +290,10 @@ if machine_results:
         output_texts.append("")
     st.code("\n".join(output_texts), language="")
 
-# ✅ 画像+修正欄
+# ✅ 画像＋補正欄（即時反映用 on_change）
+def update_output():
+    st.session_state.output_updated = True
+
 cols = st.columns(4)
 for item in sorted(machine_results, key=lambda x: (x["machine"], x["graph_number"])):
     col = cols[(item["graph_number"] - 1) % 4]
@@ -302,6 +307,7 @@ for item in sorted(machine_results, key=lambda x: (x["machine"], x["graph_number
         corrected = st.text_input(
             "",
             value=st.session_state.manual_corrections.get(item["manual_key"], ""),
-            key=f"manual_{item['manual_key']}"
+            key=f"manual_{item['manual_key']}",
+            on_change=update_output
         )
         st.session_state.manual_corrections[item["manual_key"]] = corrected
