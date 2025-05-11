@@ -226,7 +226,7 @@ for mapping in st.session_state.name_mappings:
         with col:
             img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
             st.image(img, use_container_width=True)
-            st.markdown('<div style="margin-top: -30px; margin-bottom: -20px;">', unsafe_allow_html=True)
+            st.markdown('<div style="margin-top: -50px; margin-bottom: -50px;">', unsafe_allow_html=True)
             val = st.text_input("", key=f"manual_{item['manual_key']}")
             st.markdown('</div>', unsafe_allow_html=True)
             if val != "":
