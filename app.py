@@ -45,6 +45,7 @@ if not st.session_state.name_mappings:
     st.session_state.name_mappings = load_mappings()
 
 # 処理系関数群
+
 def detect_graph_rectangles(img_gray):
     blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
     edged = cv2.Canny(blurred, 30, 150)
@@ -114,26 +115,6 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), ocr_text, fill="white", font=font)
     return pil_img
 
-# サイドバー（名称変更と並び替え）
-st.sidebar.title("🛠 名称変更設定")
-for i, mapping in enumerate(st.session_state.name_mappings):
-    cols = st.sidebar.columns([5, 1])
-    with cols[0]:
-        updated = st.text_input(f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}")
-        if updated != mapping["name_b"]:
-            st.session_state.name_mappings[i]["name_b"] = updated
-            save_mappings(st.session_state.name_mappings)
-            st.session_state.rerun_output = True
-    with cols[1]:
-        if i < len(st.session_state.name_mappings) - 1:
-            if st.button("⬇️", key=f"down_{i}"):
-                st.session_state.name_mappings[i], st.session_state.name_mappings[i + 1] = (
-                    st.session_state.name_mappings[i + 1],
-                    st.session_state.name_mappings[i],
-                )
-                save_mappings(st.session_state.name_mappings)
-                st.rerun()
-
 # メイン解析
 machine_results = []
 if uploaded_files:
@@ -158,7 +139,6 @@ if uploaded_files:
             if machine not in [m["name_a"] for m in st.session_state.name_mappings]:
                 st.session_state.name_mappings.append({"name_a": machine, "name_b": ""})
                 save_mappings(st.session_state.name_mappings)
-                st.experimental_rerun()
 
             display = next((m["name_b"] for m in st.session_state.name_mappings if m["name_a"] == machine and m["name_b"]), machine)
             samai = extract_samai_by_fixed_coords(ocr, coords_list, *img_cv.shape[1::-1])
@@ -182,9 +162,34 @@ if uploaded_files:
             st.error(f"{filename} 処理失敗: {e}")
 
 # 出力更新ボタン
-st.button("🔄 出力を更新する", on_click=lambda: setattr(st.session_state, "rerun_output", True))
+def rerun():
+    st.session_state.rerun_output = True
+st.button("🔄 出力を更新する", on_click=rerun)
 
-# 出力結果
+# サイドバー：名称マッピング編集
+def show_sidebar():
+    st.sidebar.title("🛠 名称変更設定")
+    for i, mapping in enumerate(st.session_state.name_mappings):
+        cols = st.sidebar.columns([5, 1])
+        with cols[0]:
+            updated = st.text_input(f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}")
+            if updated != mapping["name_b"]:
+                st.session_state.name_mappings[i]["name_b"] = updated
+                save_mappings(st.session_state.name_mappings)
+                st.session_state.rerun_output = True
+        with cols[1]:
+            if i < len(st.session_state.name_mappings) - 1:
+                if st.button("⬇️", key=f"down_{i}"):
+                    st.session_state.name_mappings[i], st.session_state.name_mappings[i + 1] = (
+                        st.session_state.name_mappings[i + 1],
+                        st.session_state.name_mappings[i],
+                    )
+                    save_mappings(st.session_state.name_mappings)
+                    st.rerun()
+
+show_sidebar()
+
+# 出力表示
 if machine_results and st.session_state.rerun_output:
     st.subheader("📊 出力結果")
     out = []
@@ -199,15 +204,13 @@ if machine_results and st.session_state.rerun_output:
         items = sorted(grouped[name], key=lambda x: x["graph_number"])
         valid = []
         for i in items:
-
-val = st.session_state.manual_corrections.get(i["manual_key"], "").strip()
-if val.isdigit():
-    v = int(val)
-elif val == "":
-    v = i["samai_value"]  # ← 空欄時はOCR値に戻す
-else:
-    v = None
-
+            val = st.session_state.manual_corrections.get(i["manual_key"], "").strip()
+            if val.isdigit():
+                v = int(val)
+            elif val == "":
+                v = i["samai_value"]
+            else:
+                v = None
             if v and v >= threshold and i["red_status"] == "〇赤あり":
                 valid.append(v)
         out.append(f"▼{name} ({len(valid)}/{len(items)})")
@@ -225,7 +228,7 @@ else:
         out.append("")
     st.code("\n".join(out), language="")
 
-# グラフ＋修正欄
+# グラフと修正欄の表示
 cols = st.columns(4)
 for mapping in st.session_state.name_mappings:
     name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
@@ -236,12 +239,6 @@ for mapping in st.session_state.name_mappings:
             img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
             st.image(img, use_container_width=True)
             default_val = st.session_state.manual_corrections.get(item["manual_key"], "")
-            val = st.text_input(
-                label="⬆️最大枚数の修正",
-                value=default_val,
-                key=f"manual_{item['manual_key']}",
-                label_visibility="collapsed",
-                placeholder="⬆️最大枚数の修正"
-            )
+            val = st.text_input("", value=default_val, key=f"manual_{item['manual_key']}", label_visibility="collapsed", placeholder="⬆️最大枚数の修正")
             if val != "":
                 st.session_state.manual_corrections[item["manual_key"]] = val
