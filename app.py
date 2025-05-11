@@ -238,7 +238,19 @@ for mapping in st.session_state.name_mappings:
         with col:
             img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
             st.image(img, use_container_width=True)
-            default_val = st.session_state.manual_corrections.get(item["manual_key"], "")
-            val = st.text_input("", value=default_val, key=f"manual_{item['manual_key']}", label_visibility="collapsed", placeholder="⬆️最大枚数の修正")
-            if val != "":
-                st.session_state.manual_corrections[item["manual_key"]] = val
+
+            # プレースホルダーと既存入力を両立
+            current_val = st.session_state.manual_corrections.get(item["manual_key"], "")
+            val = st.text_input(
+                "",
+                value=current_val,
+                key=f"manual_{item['manual_key']}",
+                label_visibility="collapsed",
+                placeholder="⬆️最大枚数の修正"
+            )
+
+            # 入力が数字 or 空欄のときに更新
+            if val.strip().isdigit():
+                st.session_state.manual_corrections[item["manual_key"]] = val.strip()
+            elif val.strip() == "":
+                st.session_state.manual_corrections[item["manual_key"]] = ""
