@@ -1,8 +1,6 @@
-import streamlit as st
-st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
-
 import os
 import io
+import streamlit as st
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -14,6 +12,7 @@ import json
 # 認証と初期設定
 client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
 MAPPINGS_FILE = "mappings.json"
+st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
 st.title("🎰 解析アプリ")
 threshold = st.number_input("出玉枚数のしきい値（以上）", value=2000, step=1000, key="threshold_input")
 uploaded_files = st.file_uploader("📷 グラフ画像をアップロード（複数可）", accept_multiple_files=True)
@@ -25,8 +24,8 @@ if "manual_corrections" not in st.session_state:
     st.session_state.manual_corrections = {}
 if "name_mappings" not in st.session_state:
     st.session_state.name_mappings = []
-if "machine_results" not in st.session_state:
-    st.session_state.machine_results = []
+if "rerun_output" not in st.session_state:
+    st.session_state.rerun_output = False
 
 # マッピング保存・ロード
 def load_mappings():
@@ -45,7 +44,7 @@ def save_mappings(mappings):
 if not st.session_state.name_mappings:
     st.session_state.name_mappings = load_mappings()
 
-# 画像処理関数群
+# 処理系関数群
 def detect_graph_rectangles(img_gray):
     blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
     edged = cv2.Canny(blurred, 30, 150)
@@ -124,6 +123,7 @@ for i, mapping in enumerate(st.session_state.name_mappings):
         if updated != mapping["name_b"]:
             st.session_state.name_mappings[i]["name_b"] = updated
             save_mappings(st.session_state.name_mappings)
+            st.session_state.rerun_output = True
     with cols[1]:
         if i < len(st.session_state.name_mappings) - 1:
             if st.button("⬇️", key=f"down_{i}"):
@@ -134,9 +134,9 @@ for i, mapping in enumerate(st.session_state.name_mappings):
                 save_mappings(st.session_state.name_mappings)
                 st.rerun()
 
-# メイン解析（アップロード直後に結果反映）
+# メイン解析
+machine_results = []
 if uploaded_files:
-    st.session_state.machine_results = []
     coords_list = get_fixed_coords()
     for uploaded_file in uploaded_files:
         filename = uploaded_file.name.lower()
@@ -167,7 +167,7 @@ if uploaded_files:
                 key = f"{machine}_graph_{idx + 1}"
                 if key not in st.session_state.manual_corrections:
                     st.session_state.manual_corrections[key] = ""
-                st.session_state.machine_results.append({
+                machine_results.append({
                     "machine": display,
                     "graph_number": idx + 1,
                     "image": Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)),
@@ -179,12 +179,16 @@ if uploaded_files:
         except Exception as e:
             st.error(f"{filename} 処理失敗: {e}")
 
-# 出力表示
-if st.session_state.machine_results:
+# 出力更新ボタン
+if st.button("🔄 出力を更新する"):
+    st.session_state.rerun_output = True
+
+# 出力結果（name_mappings順）
+if machine_results and st.session_state.rerun_output:
     st.subheader("📊 出力結果")
     out = []
     grouped = defaultdict(list)
-    for item in st.session_state.machine_results:
+    for item in machine_results:
         grouped[item["machine"]].append(item)
 
     for mapping in st.session_state.name_mappings:
@@ -213,11 +217,11 @@ if st.session_state.machine_results:
         out.append("")
     st.code("\n".join(out), language="")
 
-# グラフ＋修正欄
+# 画像と修正欄（name_mappings順）
 cols = st.columns(4)
 for mapping in st.session_state.name_mappings:
     name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
-    items = [m for m in st.session_state.machine_results if m["machine"] == name]
+    items = [m for m in machine_results if m["machine"] == name]
     for item in sorted(items, key=lambda x: x["graph_number"]):
         col = cols[(item["graph_number"] - 1) % 4]
         with col:
