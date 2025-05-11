@@ -9,7 +9,6 @@ import re
 from collections import defaultdict
 import json
 
-# 認証と初期設定
 client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
 MAPPINGS_FILE = "mappings.json"
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
@@ -217,7 +216,7 @@ if machine_results and st.session_state.rerun_output:
         out.append("")
     st.code("\n".join(out), language="")
 
-# 画像と修正欄（name_mappings順）
+# 画像と修正欄（name_mappings順 + 余白詰め）
 cols = st.columns(4)
 for mapping in st.session_state.name_mappings:
     name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
@@ -227,6 +226,8 @@ for mapping in st.session_state.name_mappings:
         with col:
             img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
             st.image(img, use_container_width=True)
+            st.markdown('<div style="margin-top: -12px; margin-bottom: -15px;">', unsafe_allow_html=True)
             val = st.text_input("", key=f"manual_{item['manual_key']}")
+            st.markdown('</div>', unsafe_allow_html=True)
             if val != "":
                 st.session_state.manual_corrections[item["manual_key"]] = val
