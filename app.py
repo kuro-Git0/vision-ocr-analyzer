@@ -213,11 +213,7 @@ if st.session_state.machine_results:
         out.append("")
     st.code("\n".join(out), language="")
 
-# （前略）元のコードそのまま
-
-# グラフ＋修正欄（余白削減対応）
-import base64
-
+# グラフ＋修正欄
 cols = st.columns(4)
 for mapping in st.session_state.name_mappings:
     name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
@@ -226,15 +222,7 @@ for mapping in st.session_state.name_mappings:
         col = cols[(item["graph_number"] - 1) % 4]
         with col:
             img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
-            # base64エンコードしてHTMLで埋め込み（余白削除）
-            buffered = io.BytesIO()
-            img.save(buffered, format="PNG")
-            img_base64 = base64.b64encode(buffered.getvalue()).decode()
-            st.markdown(
-                f"<img src='data:image/png;base64,{img_base64}' style='width:100%; display:block; margin-bottom:-10px;'/>",
-                unsafe_allow_html=True
-            )
-            # ラベルなしでテキスト入力を最小化
-            val = st.text_input(label="", key=f"manual_{item['manual_key']}")
+            st.image(img, use_container_width=True)
+            val = st.text_input("", key=f"manual_{item['manual_key']}")
             if val != "":
                 st.session_state.manual_corrections[item["manual_key"]] = val
