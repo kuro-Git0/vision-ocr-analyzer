@@ -1,3 +1,5 @@
+下記を修正してフルコードを下さい
+
 import streamlit as st
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
 
@@ -221,12 +223,8 @@ for mapping in st.session_state.name_mappings:
     for item in sorted(items, key=lambda x: x["graph_number"]):
         col = cols[(item["graph_number"] - 1) % 4]
         with col:
-            st.markdown(
-                f"""
-                <div style='margin-bottom: -10px'>
-                    <img src='data:image/png;base64,{Image.fromarray(np.array(item["image"]))._repr_png_().decode("utf-8")}' style='width:100%; height:auto; display:block;'/>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            st.text_input("最大枚数", key=f"manual_{item['manual_key']}")
+            img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
+            st.image(img, use_container_width=True)
+            val = st.text_input("", key=f"manual_{item['manual_key']}")
+            if val != "":
+                st.session_state.manual_corrections[item["manual_key"]] = val
