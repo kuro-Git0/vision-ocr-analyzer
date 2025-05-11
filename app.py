@@ -9,6 +9,17 @@ import re
 from collections import defaultdict
 import json
 
+# カスタムCSSで余白調整
+st.markdown("""
+    <style>
+    div[data-baseweb="input"] {
+        margin-bottom: -5px;
+        padding-bottom: 0px !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# 初期設定
 client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
 MAPPINGS_FILE = "mappings.json"
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
@@ -43,17 +54,12 @@ def save_mappings(mappings):
 if not st.session_state.name_mappings:
     st.session_state.name_mappings = load_mappings()
 
-# 処理系関数群
+# 処理系関数
 def detect_graph_rectangles(img_gray):
     blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
     edged = cv2.Canny(blurred, 30, 150)
     contours, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    rects = []
-    for c in contours:
-        x, y, w, h = cv2.boundingRect(c)
-        if 200 < w < 800 and 200 < h < 800:
-            rects.append((x, y, w, h))
-    return sorted(rects, key=lambda r: (r[1], r[0]))
+    return sorted([cv2.boundingRect(c) for c in contours if 200 < c[2] < 800 and 200 < c[3] < 800], key=lambda r: (r[1], r[0]))
 
 def run_ocr_once(img_cv):
     pil_image = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
@@ -89,12 +95,9 @@ def extract_samai_by_fixed_coords(ocr_results, coords, img_width, img_height):
             ys = [v.y for v in text.bounding_poly.vertices]
             if x1 <= min(xs) <= x2 and y1 <= min(ys) <= y2:
                 matched.append(text.description)
-        if matched:
-            joined = " ".join(matched)
-            m = re.search(r"\d{3,5}", joined.replace(",", ""))
-            results.append((idx, int(m.group()) if m else None, joined))
-        else:
-            results.append((idx, None, "なし"))
+        joined = " ".join(matched)
+        m = re.search(r"\d{3,5}", joined.replace(",", ""))
+        results.append((idx, int(m.group()) if m else None, joined if matched else "なし"))
     return results
 
 def has_red_area(image_bgr):
@@ -182,7 +185,7 @@ if uploaded_files:
 if st.button("🔄 出力を更新する"):
     st.session_state.rerun_output = True
 
-# 出力結果（name_mappings順）
+# 出力結果と画像＋修正欄（name_mappings順）
 if machine_results and st.session_state.rerun_output:
     st.subheader("📊 出力結果")
     out = []
@@ -216,18 +219,16 @@ if machine_results and st.session_state.rerun_output:
         out.append("")
     st.code("\n".join(out), language="")
 
-# 画像と修正欄（name_mappings順 + 余白詰め）
-cols = st.columns(4)
-for mapping in st.session_state.name_mappings:
-    name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
-    items = [m for m in machine_results if m["machine"] == name]
-    for item in sorted(items, key=lambda x: x["graph_number"]):
-        col = cols[(item["graph_number"] - 1) % 4]
-        with col:
-            img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
-            st.image(img, use_container_width=True)
-            st.markdown('<div style="margin-top: -50px; margin-bottom: -50px;">', unsafe_allow_html=True)
-            val = st.text_input("", key=f"manual_{item['manual_key']}")
-            st.markdown('</div>', unsafe_allow_html=True)
-            if val != "":
-                st.session_state.manual_corrections[item["manual_key"]] = val
+    # 画像＋修正欄（コンパクトに）
+    cols = st.columns(3)
+    for mapping in st.session_state.name_mappings:
+        name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
+        items = [m for m in machine_results if m["machine"] == name]
+        for item in sorted(items, key=lambda x: x["graph_number"]):
+            col = cols[(item["graph_number"] - 1) % 3]
+            with col:
+                img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
+                st.image(img, use_container_width=True)
+                val = st.text_input("", key=f"manual_{item['manual_key']}", label_visibility="collapsed", placeholder="補正値")
+                if val != "":
+                    st.session_state.manual_corrections[item["manual_key"]] = val
