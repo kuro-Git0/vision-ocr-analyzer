@@ -117,23 +117,27 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), ocr_text, fill="white", font=font)
     return pil_img
 
-# 🔁サイドバー設定
+# ✅ サイドバー（名称変更＋⬇️ボタン 即時反映 → 出力更新に変更）
 st.sidebar.title("🛠 名称変更設定")
 for i, mapping in enumerate(st.session_state.name_mappings):
     cols = st.sidebar.columns([5, 1])
     with cols[0]:
-        new_name = st.text_input(f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}")
-        if new_name != mapping["name_b"]:
-            st.session_state.name_mappings[i]["name_b"] = new_name
+        updated_name_b = st.text_input(
+            f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}"
+        )
+        if updated_name_b != mapping["name_b"]:
+            st.session_state.name_mappings[i]["name_b"] = updated_name_b
             save_mappings(st.session_state.name_mappings)
+            st.session_state.rerun_output = True  # rerunの代わりに出力更新フラグ
     with cols[1]:
         if i < len(st.session_state.name_mappings) - 1:
             if st.button("⬇️", key=f"down_{i}"):
                 st.session_state.name_mappings[i], st.session_state.name_mappings[i + 1] = (
                     st.session_state.name_mappings[i + 1],
-                    st.session_state.name_mappings[i]
+                    st.session_state.name_mappings[i],
                 )
                 save_mappings(st.session_state.name_mappings)
+                st.session_state.rerun_output = True  # rerunの代わりに出力更新フラグ
 
 # ✅ グラフ解析処理
 machine_results = []
