@@ -199,8 +199,15 @@ if machine_results and st.session_state.rerun_output:
         items = sorted(grouped[name], key=lambda x: x["graph_number"])
         valid = []
         for i in items:
-            val = st.session_state.manual_corrections.get(i["manual_key"], "").strip()
-            v = int(val) if val.isdigit() else i["samai_value"]
+
+val = st.session_state.manual_corrections.get(i["manual_key"], "").strip()
+if val.isdigit():
+    v = int(val)
+elif val == "":
+    v = i["samai_value"]  # ← 空欄時はOCR値に戻す
+else:
+    v = None
+
             if v and v >= threshold and i["red_status"] == "〇赤あり":
                 valid.append(v)
         out.append(f"▼{name} ({len(valid)}/{len(items)})")
