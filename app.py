@@ -215,7 +215,7 @@ if machine_results and st.session_state.rerun_output:
         out.append("")
     st.code("\n".join(out), language="")
 
-# 画像＋修正欄
+# 画像＋修正欄（余白削除＋テキスト追加）
 cols = st.columns(4)
 for mapping in st.session_state.name_mappings:
     name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
@@ -225,7 +225,7 @@ for mapping in st.session_state.name_mappings:
         with col:
             img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
             st.image(img, use_container_width=True)
-            st.caption("⬆️最大枚数の修正")
+            st.markdown("<div style='margin-top:-20px; margin-bottom:0px; font-size:12px;'>⬆️最大枚数の修正</div>", unsafe_allow_html=True)
             val = st.text_input(" ", value=st.session_state.manual_corrections.get(item["manual_key"], ""), label_visibility="collapsed", key=f"manual_{item['manual_key']}")
             if val != "":
                 st.session_state.manual_corrections[item["manual_key"]] = val
