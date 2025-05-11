@@ -217,16 +217,24 @@ if machine_results and st.session_state.rerun_output:
         out.append("")
     st.code("\n".join(out), language="")
 
-# 画像と修正欄（name_mappings順）
+# グラフ＋修正欄
 cols = st.columns(4)
 for mapping in st.session_state.name_mappings:
     name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
-    items = [m for m in machine_results if m["machine"] == name]
+    items = [m for m in st.session_state.machine_results if m["machine"] == name]
     for item in sorted(items, key=lambda x: x["graph_number"]):
         col = cols[(item["graph_number"] - 1) % 4]
         with col:
-            img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
+            img = draw_text_on_pil_image(
+                item["image"].copy(),
+                f"{item['machine']} グラフ {item['graph_number']}",
+                f"OCR結果: {item['samai_text']} / {item['red_status']}"
+            )
             st.image(img, use_container_width=True)
-            val = st.text_input("", key=f"manual_{item['manual_key']}")
+            val = st.text_input(
+                label="",  # ラベル非表示
+                key=f"manual_{item['manual_key']}",
+                label_visibility="collapsed"  # ← ここがポイント
+            )
             if val != "":
                 st.session_state.manual_corrections[item["manual_key"]] = val
