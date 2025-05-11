@@ -11,13 +11,14 @@ import re
 from collections import defaultdict
 import json
 
+# 認証と初期設定
 client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
 MAPPINGS_FILE = "mappings.json"
-
 st.title("🎰 解析アプリ")
 threshold = st.number_input("出玉枚数のしきい値（以上）", value=2000, step=1000, key="threshold_input")
 uploaded_files = st.file_uploader("📷 グラフ画像をアップロード（複数可）", accept_multiple_files=True)
 
+# セッション初期化
 if "ocr_cache" not in st.session_state:
     st.session_state.ocr_cache = {}
 if "manual_corrections" not in st.session_state:
@@ -27,6 +28,7 @@ if "name_mappings" not in st.session_state:
 if "machine_results" not in st.session_state:
     st.session_state.machine_results = []
 
+# マッピング保存・ロード
 def load_mappings():
     if os.path.exists(MAPPINGS_FILE):
         try:
@@ -43,6 +45,7 @@ def save_mappings(mappings):
 if not st.session_state.name_mappings:
     st.session_state.name_mappings = load_mappings()
 
+# 画像処理関数群
 def detect_graph_rectangles(img_gray):
     blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
     edged = cv2.Canny(blurred, 30, 150)
@@ -112,7 +115,7 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), ocr_text, fill="white", font=font)
     return pil_img
 
-# 名称編集UI
+# サイドバー（名称変更と並び替え）
 st.sidebar.title("🛠 名称変更設定")
 for i, mapping in enumerate(st.session_state.name_mappings):
     cols = st.sidebar.columns([5, 1])
@@ -131,7 +134,7 @@ for i, mapping in enumerate(st.session_state.name_mappings):
                 save_mappings(st.session_state.name_mappings)
                 st.rerun()
 
-# 画像処理
+# メイン解析（アップロード直後に結果反映）
 if uploaded_files:
     st.session_state.machine_results = []
     coords_list = get_fixed_coords()
@@ -176,7 +179,7 @@ if uploaded_files:
         except Exception as e:
             st.error(f"{filename} 処理失敗: {e}")
 
-# 出力結果表示
+# 出力表示
 if st.session_state.machine_results:
     st.subheader("📊 出力結果")
     out = []
@@ -210,15 +213,16 @@ if st.session_state.machine_results:
         out.append("")
     st.code("\n".join(out), language="")
 
-    cols = st.columns(4)
-    for mapping in st.session_state.name_mappings:
-        name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
-        items = [m for m in st.session_state.machine_results if m["machine"] == name]
-        for item in sorted(items, key=lambda x: x["graph_number"]):
-            col = cols[(item["graph_number"] - 1) % 4]
-            with col:
-                img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
-                st.image(img, use_container_width=True)
-                val = st.text_input("\u200b", key=f"manual_{item['manual_key']}")
-                if val != "":
-                    st.session_state.manual_corrections[item["manual_key"]] = val
+# グラフ＋修正欄
+cols = st.columns(4)
+for mapping in st.session_state.name_mappings:
+    name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
+    items = [m for m in st.session_state.machine_results if m["machine"] == name]
+    for item in sorted(items, key=lambda x: x["graph_number"]):
+        col = cols[(item["graph_number"] - 1) % 4]
+        with col:
+            img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
+            st.image(img, use_container_width=True)
+            val = st.text_input("", key=f"manual_{item['manual_key']}")
+            if val != "":
+                st.session_state.manual_corrections[item["manual_key"]] = val
