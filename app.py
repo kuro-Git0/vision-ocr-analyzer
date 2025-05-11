@@ -1,5 +1,3 @@
-下記を修正してフルコードを下さい
-
 import streamlit as st
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
 
@@ -7,6 +5,7 @@ import os
 import io
 import cv2
 import numpy as np
+import base64
 from PIL import Image, ImageDraw, ImageFont
 from google.cloud import vision
 import re
@@ -117,6 +116,11 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), ocr_text, fill="white", font=font)
     return pil_img
 
+def img_to_base64(pil_img):
+    buffered = io.BytesIO()
+    pil_img.save(buffered, format="PNG")
+    return base64.b64encode(buffered.getvalue()).decode("utf-8")
+
 # サイドバー（名称変更と並び替え）
 st.sidebar.title("🛠 名称変更設定")
 for i, mapping in enumerate(st.session_state.name_mappings):
@@ -136,7 +140,7 @@ for i, mapping in enumerate(st.session_state.name_mappings):
                 save_mappings(st.session_state.name_mappings)
                 st.rerun()
 
-# メイン解析（アップロード直後に結果反映）
+# メイン解析
 if uploaded_files:
     st.session_state.machine_results = []
     coords_list = get_fixed_coords()
@@ -215,7 +219,7 @@ if st.session_state.machine_results:
         out.append("")
     st.code("\n".join(out), language="")
 
-# グラフ＋修正欄
+# グラフ＋修正欄（余白最小化）
 cols = st.columns(4)
 for mapping in st.session_state.name_mappings:
     name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
@@ -224,7 +228,10 @@ for mapping in st.session_state.name_mappings:
         col = cols[(item["graph_number"] - 1) % 4]
         with col:
             img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
-            st.image(img, use_container_width=True)
+            st.markdown(
+                f"<img src='data:image/png;base64,{img_to_base64(img)}' style='margin-bottom:-16px; width:100%; display:block;'/>",
+                unsafe_allow_html=True,
+            )
             val = st.text_input("", key=f"manual_{item['manual_key']}")
             if val != "":
                 st.session_state.manual_corrections[item["manual_key"]] = val
