@@ -115,7 +115,7 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 35), ocr_text, fill="white", font=font)
     return pil_img
 
-# サイドバー（名称変更）
+# サイドバー（名称変更と並び替え）
 st.sidebar.title("🛠 名称変更設定")
 for i, mapping in enumerate(st.session_state.name_mappings):
     cols = st.sidebar.columns([5, 1])
@@ -133,7 +133,7 @@ for i, mapping in enumerate(st.session_state.name_mappings):
                     st.session_state.name_mappings[i],
                 )
                 save_mappings(st.session_state.name_mappings)
-                st.session_state.rerun_output = True
+                st.rerun()  # ✅ 即時再描画（並び替えを反映）
 
 # メイン解析
 machine_results = []
