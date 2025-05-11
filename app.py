@@ -45,7 +45,7 @@ def save_mappings(mappings):
 if not st.session_state.name_mappings:
     st.session_state.name_mappings = load_mappings()
 
-# 画像処理関数
+# 画像処理関数群
 def detect_graph_rectangles(img_gray):
     blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
     edged = cv2.Canny(blurred, 30, 150)
@@ -114,3 +114,117 @@ def draw_text_on_pil_image(pil_img, machine_name, ocr_text):
     draw.text((10, 5), machine_name, fill="white", font=font)
     draw.text((10, 35), ocr_text, fill="white", font=font)
     return pil_img
+
+# サイドバー（名称変更と並び替え）
+st.sidebar.title("🛠 名称変更設定")
+for i, mapping in enumerate(st.session_state.name_mappings):
+    cols = st.sidebar.columns([5, 1])
+    with cols[0]:
+        updated = st.text_input(f"{mapping['name_a']}", value=mapping["name_b"], key=f"name_b_{i}")
+        if updated != mapping["name_b"]:
+            st.session_state.name_mappings[i]["name_b"] = updated
+            save_mappings(st.session_state.name_mappings)
+            st.session_state.rerun_output = True
+    with cols[1]:
+        if i < len(st.session_state.name_mappings) - 1:
+            if st.button("⬇️", key=f"down_{i}"):
+                st.session_state.name_mappings[i], st.session_state.name_mappings[i + 1] = (
+                    st.session_state.name_mappings[i + 1],
+                    st.session_state.name_mappings[i],
+                )
+                save_mappings(st.session_state.name_mappings)
+                st.rerun()
+
+# メイン解析
+machine_results = []
+if uploaded_files:
+    coords_list = get_fixed_coords()
+    st.session_state.rerun_output = True  # ← アップロード時に即時出力ON
+    for uploaded_file in uploaded_files:
+        filename = uploaded_file.name.lower()
+        if not filename.endswith((".jpg", ".jpeg", ".png")):
+            st.warning(f"{filename} は非対応です")
+            continue
+        try:
+            image = Image.open(uploaded_file)
+            image = image.resize((780, int(image.size[1] * 780 / image.size[0])), Image.LANCZOS)
+            img_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+            img_gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+
+            if filename not in st.session_state.ocr_cache:
+                st.session_state.ocr_cache[filename] = run_ocr_once(img_cv)
+
+            ocr = st.session_state.ocr_cache[filename]
+            machine = extract_machine_name_by_lines(ocr)
+            if machine not in [m["name_a"] for m in st.session_state.name_mappings]:
+                st.session_state.name_mappings.append({"name_a": machine, "name_b": ""})
+                save_mappings(st.session_state.name_mappings)
+
+            display = next((m["name_b"] for m in st.session_state.name_mappings if m["name_a"] == machine and m["name_b"]), machine)
+            samai = extract_samai_by_fixed_coords(ocr, coords_list, *img_cv.shape[1::-1])
+            rects = detect_graph_rectangles(img_gray)
+
+            for idx, (x, y, w, h) in enumerate(rects):
+                crop = img_cv[y:y+h, x:x+w]
+                key = f"{machine}_graph_{idx + 1}"
+                if key not in st.session_state.manual_corrections:
+                    st.session_state.manual_corrections[key] = ""
+                machine_results.append({
+                    "machine": display,
+                    "graph_number": idx + 1,
+                    "image": Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)),
+                    "samai_value": samai[idx][1] if idx < len(samai) else None,
+                    "samai_text": samai[idx][2] if idx < len(samai) else "不明",
+                    "red_status": "〇赤あり" if has_red_area(crop) else "×赤なし",
+                    "manual_key": key
+                })
+        except Exception as e:
+            st.error(f"{filename} 処理失敗: {e}")
+
+# 出力表示
+if machine_results and st.session_state.rerun_output:
+    st.subheader("📊 出力結果")
+    out = []
+    grouped = defaultdict(list)
+    for item in machine_results:
+        grouped[item["machine"]].append(item)
+
+    for mapping in st.session_state.name_mappings:
+        name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
+        if name not in grouped:
+            continue
+        items = sorted(grouped[name], key=lambda x: x["graph_number"])
+        valid = []
+        for i in items:
+            val = st.session_state.manual_corrections.get(i["manual_key"], "").strip()
+            v = int(val) if val.isdigit() else i["samai_value"]
+            if v and v >= threshold and i["red_status"] == "〇赤あり":
+                valid.append(v)
+        out.append(f"▼{name} ({len(valid)}/{len(items)})")
+        for v in sorted(valid, reverse=True):
+            if v >= 19000:
+                out.append(f"㊗️{v}枚 コンプ！")
+            elif v >= 10000:
+                out.append(f"🎉{v}枚")
+            elif v >= 8000:
+                out.append(f"🚨{v}枚")
+            elif v >= 5000:
+                out.append(f"✨{v}枚")
+            else:
+                out.append(f"・{v}枚")
+        out.append("")
+    st.code("\n".join(out), language="")
+
+# グラフ＋修正欄
+cols = st.columns(4)
+for mapping in st.session_state.name_mappings:
+    name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
+    items = [m for m in machine_results if m["machine"] == name]
+    for item in sorted(items, key=lambda x: x["graph_number"]):
+        col = cols[(item["graph_number"] - 1) % 4]
+        with col:
+            img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
+            st.image(img, use_container_width=True)
+            val = st.text_input("", key=f"manual_{item['manual_key']}")
+            if val != "":
+                st.session_state.manual_corrections[item["manual_key"]] = val
