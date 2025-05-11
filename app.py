@@ -216,6 +216,8 @@ if st.session_state.machine_results:
 # （前略）元のコードそのまま
 
 # グラフ＋修正欄（余白削減対応）
+import base64
+
 cols = st.columns(4)
 for mapping in st.session_state.name_mappings:
     name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
