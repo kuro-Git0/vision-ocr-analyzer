@@ -223,6 +223,10 @@ for mapping in st.session_state.name_mappings:
         with col:
             img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
             st.image(img, use_container_width=True)
+
+st.markdown("**▼最大枚数の修正**")
+val = st.text_input("", key=f"manual_{item['manual_key']}")
+
             val = st.text_input("", key=f"manual_{item['manual_key']}")
             if val != "":
                 st.session_state.manual_corrections[item["manual_key"]] = val
