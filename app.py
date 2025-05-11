@@ -1,3 +1,4 @@
+# streamlit_app.py
 import os
 import io
 import streamlit as st
@@ -9,6 +10,7 @@ import re
 from collections import defaultdict
 import json
 
+# 認証と初期設定
 client = vision.ImageAnnotatorClient.from_service_account_info(st.secrets["google_credentials"])
 MAPPINGS_FILE = "mappings.json"
 st.set_page_config(layout="wide", page_title="🎰 パチスログラフ解析アプリ")
@@ -16,6 +18,7 @@ st.title("🎰 解析アプリ")
 threshold = st.number_input("出玉枚数のしきい値（以上）", value=2000, step=1000, key="threshold_input")
 uploaded_files = st.file_uploader("📷 グラフ画像をアップロード（複数可）", accept_multiple_files=True)
 
+# セッション初期化
 if "ocr_cache" not in st.session_state:
     st.session_state.ocr_cache = {}
 if "manual_corrections" not in st.session_state:
@@ -25,6 +28,7 @@ if "name_mappings" not in st.session_state:
 if "rerun_output" not in st.session_state:
     st.session_state.rerun_output = False
 
+# マッピング保存・ロード
 def load_mappings():
     if os.path.exists(MAPPINGS_FILE):
         try:
@@ -41,6 +45,7 @@ def save_mappings(mappings):
 if not st.session_state.name_mappings:
     st.session_state.name_mappings = load_mappings()
 
+# 処理系関数群
 def detect_graph_rectangles(img_gray):
     blurred = cv2.GaussianBlur(img_gray, (5, 5), 0)
     edged = cv2.Canny(blurred, 30, 150)
@@ -134,6 +139,7 @@ for i, mapping in enumerate(st.session_state.name_mappings):
 machine_results = []
 if uploaded_files:
     coords_list = get_fixed_coords()
+    st.session_state.rerun_output = True
     for uploaded_file in uploaded_files:
         filename = uploaded_file.name.lower()
         if not filename.endswith((".jpg", ".jpeg", ".png")):
@@ -175,11 +181,7 @@ if uploaded_files:
         except Exception as e:
             st.error(f"{filename} 処理失敗: {e}")
 
-# 出力更新ボタン
-if st.button("🔄 出力を更新する"):
-    st.session_state.rerun_output = True
-
-# 出力結果表示
+# 出力表示
 if machine_results and st.session_state.rerun_output:
     st.subheader("📊 出力結果")
     out = []
@@ -213,7 +215,7 @@ if machine_results and st.session_state.rerun_output:
         out.append("")
     st.code("\n".join(out), language="")
 
-# 画像＋修正欄（余白最小化）
+# 画像＋修正欄
 cols = st.columns(4)
 for mapping in st.session_state.name_mappings:
     name = mapping["name_b"] if mapping["name_b"] else mapping["name_a"]
@@ -223,8 +225,7 @@ for mapping in st.session_state.name_mappings:
         with col:
             img = draw_text_on_pil_image(item["image"].copy(), f"{item['machine']} グラフ {item['graph_number']}", f"OCR結果: {item['samai_text']} / {item['red_status']}")
             st.image(img, use_container_width=True)
-            st.markdown(f"""
-                <input type="text" name="manual_{item['manual_key']}" placeholder="▼最大枚数の修正" 
-                oninput="window.dispatchEvent(new Event('input'))" style="width:100%;margin:0;padding:2px;"
-                value="{st.session_state.manual_corrections.get(item['manual_key'], '')}">
-                """, unsafe_allow_html=True)
+            st.caption("⬆️最大枚数の修正")
+            val = st.text_input(" ", value=st.session_state.manual_corrections.get(item["manual_key"], ""), label_visibility="collapsed", key=f"manual_{item['manual_key']}")
+            if val != "":
+                st.session_state.manual_corrections[item["manual_key"]] = val
